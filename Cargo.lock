@@ -829,6 +829,7 @@ name = "vgaligner"
 version = "0.1.0"
 dependencies = [
  "bstr",
+ "bv",
  "clap",
  "gfa",
  "handlegraph",
