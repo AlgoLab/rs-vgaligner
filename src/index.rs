@@ -3,6 +3,9 @@ use handlegraph::handle:: {Handle,Edge,Direction};
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::handlegraph::HandleGraph;
 use bstr::ByteSlice;
+use std::fs::File;
+use std::io::Write;
+use crate::utils::reverse_complement;
 
 pub struct Index {
     // the kmer size that this graph was built on
@@ -70,17 +73,44 @@ impl IndexUtilities for Index {
             total_length += node.sequence.len() as u64;
         }
 
+        // Mark node starts in forward
         let mut seq_bw : BitVec = BitVec::new_fill(false,total_length+1);
 
-        let mut seq_idx : u64 = 0;
+        // Create files
 
-        let mut n_edges = 0; //TODO: review
+        // This file will contain the forward sequences of the graph
+        let seq_fwd_filename : String = out_prefix.to_owned() + ".sqf";
+        let mut seq_fwd_f = File::create(seq_fwd_filename).unwrap();
+
+        // This file will contain the reverse sequences of the graph
+        let seq_rev_filename : String = out_prefix.to_owned() + ".sqr";
+        let mut seq_rev_f = File::create(seq_rev_filename).unwrap();
+
+        // This file will contain the incoming edges of a given node
+        let edge_filename : String = out_prefix.to_owned() + ".gye";
+        let mut edge_f = File::create(edge_filename).unwrap();
+
+        //This file will contain the outgoing edges of a given node
+        let node_ref_filename : String = out_prefix.to_owned() + ".gyn";
+        let mut node_ref_f = File::create(node_ref_filename).unwrap();
+
+
+        // Iterate over the graph to fill in the files defined above
+        let mut seq_idx : u64 = 0;
+        let mut n_edges = 0; //TODO: review -- not initialized in C++?
 
         graph.handles_iter().for_each(|h| {
+
+            // Mark the node in the bitvector
             seq_bw.set(seq_idx, true);
 
+            // Get the sequence of the node
             let node = graph.get_node(&h.id()).unwrap();
             let seq = node.sequence.clone().to_string();
+
+            // Write the forward and reverse complemented version
+            seq_fwd_f.write(&seq.as_bytes());
+            seq_rev_f.write(&reverse_complement(&seq).as_bytes());
 
             let mut reference = node_ref {
                 seq_idx,
@@ -88,18 +118,43 @@ impl IndexUtilities for Index {
                 count_prev : 0
             };
 
-            graph.handle_edges_iter(h, Direction::Right).for_each(|p|{
+            graph.handle_edges_iter(h, Direction::Left).for_each(|p|{
+                edge_f.write(p.id().to_string().as_bytes());
                 reference.count_prev += 1;
             });
 
             n_edges += reference.count_prev;
+            let reference_string= format!("{},{},{}\n",
+                                          reference.seq_idx,
+                                          reference.edge_idx,
+                                          reference.count_prev);
+            node_ref_f.write(reference_string.as_bytes());
 
-            graph.handle_edges_iter(h, Direction::Left).for_each(|p|{
+            graph.handle_edges_iter(h, Direction::Right).for_each(|p|{
+                edge_f.write(p.id().to_string().as_bytes());
                 n_edges += 1;
             });
 
             seq_idx += seq.len() as u64;
         });
+
+        // Write a marker reference, to simplify counting of edges
+
+        let mut reference = node_ref {
+            seq_idx,
+            edge_idx : n_edges,
+            count_prev : 0
+        };
+
+        let reference_string= format!("{},{},{}\n",
+                                      reference.seq_idx,
+                                      reference.edge_idx,
+                                      reference.count_prev);
+        node_ref_f.write(reference_string.as_bytes());
+
+        assert_eq!(reference.seq_idx, total_length);
+        seq_bw.set(seq_idx, true); //end marker
+
 
         Index {
             kmer_length: *kmer_length,

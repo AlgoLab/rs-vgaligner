@@ -5,6 +5,8 @@ use handlegraph::hashgraph::HashGraph;
 use clap::{App, Arg};
 
 mod index;
+mod utils;
+
 use crate::index::{Index,IndexUtilities};
 
 fn main() {
@@ -49,6 +51,6 @@ fn main() {
     let graph = HashGraph::from_gfa(&gfa);
 
     // STEP 1: Build the index for the input graph
-    let graph_index = Index::build(&graph, &kmer_length, &100, &100, &1.0, &"");
+    let graph_index = Index::build(&graph, &kmer_length, &100, &100, &1.0, &"./output/file");
 
 }
