@@ -1,56 +1,40 @@
-// Adapted from: https://github.com/delagoya/rusty-bio
+use bv::*;
 
-pub fn reverse_complement(sequence : &str) -> String {
-    let mut rc_seq = String::with_capacity(sequence.len());
+// Returns the rank vector of a given bitvector bv
+// The rank for an element bv[i] is defined as the number of 1s in [bv[0]...bv[i]]
+// We compute the rank for every element in bv, and put these ranks in a Vec
+pub fn get_bv_rank(bv : &BitVec) -> Vec<u32> {
+    let mut bv_rank = Vec::with_capacity(bv.len() as usize);
 
-    for base in sequence.chars().rev() {
-        match is_dna(base) {
-            false => panic!("Input sequence base is not DNA: {}", base),
-            true => rc_seq.push(switch_base(base))
+    let mut curr_rank = 0;
+    for i in 0..bv.len() {
+        if bv.get(i) == true {
+            curr_rank += 1;
         }
+        bv_rank.push(curr_rank);
     }
 
-    rc_seq
-}
-
-fn switch_base(c:char) -> char {
-    match c {
-        'a' => 't',
-        'c' => 'g',
-        't' => 'a',
-        'g' => 'c',
-        'u' => 'a',
-        'A' => 'T',
-        'C' => 'G',
-        'T' => 'A',
-        'G' => 'C',
-        'U' => 'A',
-        _ => 'N'
-    }
-}
-
-fn is_dna(base: char) -> bool {
-    match base {
-        'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U'| 'u'  => true,
-        _ => false
-    }
+    bv_rank
 }
 
 #[test]
-fn test_is_dna() {
-    assert!(is_dna('A'))
+fn test_simple_rank_1_a() {
+    assert_eq!(get_bv_rank(&bit_vec![false]), vec![0])
 }
 
 #[test]
-#[should_panic]
-fn test_is_dna_false() {
-    assert!(is_dna('z'))
+fn test_simple_rank_1_b() {
+    assert_eq!(get_bv_rank(&bit_vec![true]), vec![1])
 }
 
 #[test]
-fn test_revcomp() {
-    // ATGC =>  CGTA => GCAT
-    assert_eq!("GCAT".to_string(), reverse_complement("ATGC"))
+fn test_simple_rank_2() {
+    assert_eq!(get_bv_rank(&bit_vec![false, true, false]), vec![0,1,1])
+}
+
+#[test]
+fn test_simple_rank_3() {
+    assert_eq!(get_bv_rank(&bit_vec![true, false, true, false]), vec![1,1,2,2])
 }
 
 

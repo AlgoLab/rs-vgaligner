@@ -6,8 +6,11 @@ use clap::{App, Arg};
 
 mod index;
 mod utils;
+mod dna;
 
-use crate::index::{Index,IndexUtilities};
+//use crate::index::{Index,IndexUtilities};
+use crate::index::Index;
+use crate::dna::reverse_complement;
 
 fn main() {
 

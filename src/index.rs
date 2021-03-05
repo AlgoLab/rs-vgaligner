@@ -4,9 +4,11 @@ use handlegraph::hashgraph::HashGraph;
 use handlegraph::handlegraph::HandleGraph;
 use bstr::ByteSlice;
 use std::fs::File;
-use std::io::Write;
-use crate::utils::reverse_complement;
+use std::io::{Write, Read};
+use crate::utils::get_bv_rank;
+use crate::dna::reverse_complement;
 
+#[derive(Default)]
 pub struct Index {
     // the kmer size that this graph was built on
     kmer_length : u64,
@@ -44,7 +46,8 @@ pub struct Index {
     loaded : bool
 }
 
-pub struct node_ref {
+#[derive(Default)]
+pub struct Node_ref {
     seq_idx : u64,
     edge_idx : u64,
     count_prev : u64,
@@ -52,7 +55,7 @@ pub struct node_ref {
 
 // TODO: add remaining traits etc.
 
-pub trait IndexUtilities {
+/*pub trait IndexUtilities {
     fn build(graph : &HashGraph,
              kmer_length : &u64,
              max_furcations : &u64,
@@ -60,10 +63,21 @@ pub trait IndexUtilities {
              sampling_rate : &f32,
              out_prefix : &str) -> Index;
     //fn load() -> Index;
-}
+}*/
 
-impl IndexUtilities for Index {
-    fn build(graph : &HashGraph, kmer_length : &u64, max_furcations : &u64, max_degree : &u64, sampling_rate : &f32, out_prefix : &str) -> Index {
+impl Index {
+
+    //See this pattern here: https://stackoverflow.com/a/41510505/5627359
+    fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn build(graph : &HashGraph, kmer_length : &u64, max_furcations : &u64, max_degree : &u64,
+                 sampling_rate : &f32, out_prefix : &str) -> Self {
+
+        // Create the new index
+        let mut index = Index::new();
+
         let number_nodes = graph.graph.len();
 
         // Find total length of the sequences in the graph
@@ -72,9 +86,10 @@ impl IndexUtilities for Index {
             let node = graph.get_node(&value.id()).unwrap();
             total_length += node.sequence.len() as u64;
         }
+        index.seq_length = total_length;
 
         // Mark node starts in forward
-        let mut seq_bw : BitVec = BitVec::new_fill(false,total_length+1);
+        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
 
         // Create files
 
@@ -102,7 +117,7 @@ impl IndexUtilities for Index {
         graph.handles_iter().for_each(|h| {
 
             // Mark the node in the bitvector
-            seq_bw.set(seq_idx, true);
+            seq_bv.set(seq_idx, true);
 
             // Get the sequence of the node
             let node = graph.get_node(&h.id()).unwrap();
@@ -110,9 +125,12 @@ impl IndexUtilities for Index {
 
             // Write the forward and reverse complemented version
             seq_fwd_f.write(&seq.as_bytes());
-            seq_rev_f.write(&reverse_complement(&seq).as_bytes());
 
-            let mut reference = node_ref {
+            //seq_rev_f.write(&reverse_complement(&seq).as_bytes());
+            // Will be reverse complemented later on
+            seq_rev_f.write(&seq.as_bytes());
+
+            let mut reference = Node_ref {
                 seq_idx,
                 edge_idx : n_edges,
                 count_prev : 0
@@ -140,7 +158,7 @@ impl IndexUtilities for Index {
 
         // Write a marker reference, to simplify counting of edges
 
-        let mut reference = node_ref {
+        let mut reference = Node_ref {
             seq_idx,
             edge_idx : n_edges,
             count_prev : 0
@@ -153,26 +171,32 @@ impl IndexUtilities for Index {
         node_ref_f.write(reference_string.as_bytes());
 
         assert_eq!(reference.seq_idx, total_length);
-        seq_bw.set(seq_idx, true); //end marker
 
 
-        Index {
-            kmer_length: *kmer_length,
-            sampling_length: 0,
-            seq_length: total_length,
-            seq_fwd: Vec::new(),
-            seq_rev: Vec::new(),
-            seq_bv: seq_bw,
-            seq_by_rank: BitVec::new(),
-            n_edges: n_edges,
-            edges: Vec::new(),
-            n_nodes: number_nodes as u64,
-            nodes: Vec::new(),
-            n_kmers: 0,
-            n_kmer_pos: 0,
-            kmer_pos_ref: Vec::new(),
-            kmer_pos_table: Vec::new(),
-            loaded: true
-        }
+        // Save bw and rank as files
+        seq_bv.set(seq_idx, true); //end marker
+
+        //This file will the bitvector
+        let seq_bv_filename : String = out_prefix.to_owned() + ".sbv";
+        let mut seq_bv_f = File::create(seq_bv_filename).unwrap();
+
+        // Compute bitvector rank
+        let mut seq_bv_rank = get_bv_rank(&seq_bv);
+
+        let mut seq_fwd = String::new();
+
+        seq_fwd_f.read_to_string(&mut seq_fwd);
+        let seq_rev = reverse_complement(seq_fwd.as_str());
+
+        println!("Forward: {:#?}", seq_fwd);
+        println!("Reverse: {:#?}", seq_rev);
+
+        //println!("Seq bv: {:#?}",seq_bv);
+        //println!("Seq rank: {:#?}", seq_bv_rank);
+
+        //seq_bv.serialize(&seq_bv_f);
+        //seq_by_rank.serialize(&seq_bv_f);
+
+        index
     }
 }
