@@ -8,6 +8,7 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
+use crate::kmer::{generate_kmers, generate_kmers_hash};
 
 #[derive(Default)]
 pub struct Index {
@@ -73,8 +74,8 @@ impl Index {
         Default::default()
     }
 
-    pub fn build(graph : &HashGraph, kmer_length : &u64, max_furcations : &u64, max_degree : &u64,
-                 sampling_rate : &f32, out_prefix : &str) -> Self {
+    pub fn build(graph : &HashGraph, kmer_length : u64, max_furcations : u64, max_degree : u64,
+                 sampling_rate : f32, out_prefix : &str) -> Self {
 
         // Create the new index
         let mut index = Index::new();
@@ -98,6 +99,13 @@ impl Index {
         println!("Forward is: {}", forward);
         println!("Reverse is: {}", reverse);
         println!("BV is: {:#?}", seq_bv);
+
+        let kmers = generate_kmers(graph,kmer_length as u64, Some(max_degree));
+        let hashes = generate_kmers_hash(&kmers);
+
+        println!("kmers: {:#?}", kmers);
+        println!("hashes: {:#?}", hashes);
+
 
         /*
         // Create files
