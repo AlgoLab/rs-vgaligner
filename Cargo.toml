@@ -13,3 +13,5 @@ clap = "2.33.3"
 bstr = "0.2.15"
 bv = "0.11.1"
 rayon = "1.5.0"
+# Minimal Perfect Hash Funnction, it's bbhash with another name
+boomphf = "0.5.9"

@@ -1,12 +1,13 @@
 use bv::BitVec;
-use handlegraph::handle:: {Handle,Edge,Direction};
+use handlegraph::handle::{Handle,Edge,Direction,NodeId};
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::handlegraph::HandleGraph;
 use bstr::ByteSlice;
 use std::fs::File;
 use std::io::{Write, Read};
-use crate::utils::get_bv_rank;
+use crate::utils::{get_bv_rank, find_sequence};
 use crate::dna::reverse_complement;
+use gfa::gfa::Orientation;
 
 #[derive(Default)]
 pub struct Index {
@@ -91,6 +92,14 @@ impl Index {
         // Mark node starts in forward
         let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
 
+        let forward = find_sequence(graph, &mut seq_bv);
+        let reverse = reverse_complement(&forward.as_str());
+
+        println!("Forward is: {}", forward);
+        println!("Reverse is: {}", reverse);
+        println!("BV is: {:#?}", seq_bv);
+
+        /*
         // Create files
 
         // This file will contain the forward sequences of the graph
@@ -196,6 +205,7 @@ impl Index {
 
         //seq_bv.serialize(&seq_bv_f);
         //seq_by_rank.serialize(&seq_bv_f);
+         */
 
         index
     }
