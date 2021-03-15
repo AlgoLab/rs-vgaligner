@@ -93,6 +93,7 @@ impl Index {
         // Mark node starts in forward
         let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
 
+        // TODO: add node_ref
         let forward = find_sequence(graph, &mut seq_bv);
         let reverse = reverse_complement(&forward.as_str());
 
@@ -100,11 +101,16 @@ impl Index {
         println!("Reverse is: {}", reverse);
         println!("BV is: {:#?}", seq_bv);
 
-        let kmers = generate_kmers(graph,kmer_length as u64, Some(max_degree));
-        let hashes = generate_kmers_hash(&kmers);
+        let kmers_on_graph = generate_kmers(graph,kmer_length as u64, Some(max_degree));
+        //let kmers_on_seq_fwd : Vec<KmerSeq> = generate_pos_on_fwd(kmers_on_graph, seq_bv, node_ref);
+        //let hashes = generate_kmers_hash(&kmers_on_seq_fwd);
 
-        println!("kmers: {:#?}", kmers);
-        println!("hashes: {:#?}", hashes);
+        println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        //println!("hashes: {:#?}", hashes);
+
+        //for val in hashes.keys() {
+        //    println!("{}",val);
+        //}
 
 
         /*

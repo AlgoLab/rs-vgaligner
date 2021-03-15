@@ -7,6 +7,12 @@ use std::collections::VecDeque;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
 use bstr::ByteSlice;
 
+pub struct NodeRef {
+    seq_idx : u64,
+    edge_idx : u64,
+    edges_to_node : u64
+}
+
 /// Finds the forward sequence encoded in a (not necessarily partially ordered) graph
 /// This function uses a BFS visit, and retrieves the forward sequence from each
 /// node it visits, then concatenates them into a string.

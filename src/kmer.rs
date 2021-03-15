@@ -4,28 +4,28 @@ use handlegraph::handle::{Handle, Direction};
 use std::cmp::min;
 use boomphf::*;
 use substring::Substring;
+use ahash::AHashMap;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct kmer {
+pub struct Kmer {
     seq : String,
     begin : u64,
     end : u64,
-    handle : Handle,
+    //handle: Handle
+    handle : Vec<Handle>,
 }
 
-impl kmer {
-    pub fn extend_kmer(&mut self, new_seq : String) {
+impl Kmer {
+    pub fn extend_kmer(&mut self, new_seq : String, new_handle : Handle) {
         self.seq.push_str(&new_seq);
         self.end += new_seq.len() as u64;
-        // This makes the end go outside the handle...
-        // TODO: rethink how kmers are stored (maybe Vec<Handle> and multiple starts/ends?)
+        self.handle.push(new_handle);
     }
 }
 
-// TODO: currently only returns kmers in the same node
-pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<kmer> {
+pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<Kmer> {
 
-    let mut kmers : Vec<kmer> = Vec::new();
+    let mut kmers : Vec<Kmer> = Vec::new();
 
     // For each handle
     graph.handles_iter().for_each(|h| {
@@ -56,19 +56,37 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
             for i in 0..k {
                 let begin = i;
                 let end = min(i+k, handle_length);
-                let kmer = kmer {
-                    // This cannot be right...
-                    //seq : (&handle_seq.to_owned()[begin as usize..end as usize]).to_string(),
-                    // This is better, but requires an external crate
+                let mut kmer = Kmer {
                     seq : handle_seq.substring(begin as usize, end as usize).to_string(),
                     begin,
                     end,
-                    handle
+                    //handle
+                    handle : vec![handle]
                 };
 
                 if kmer.seq.len() < k as usize {
-                    // TODO: check neighbors
-                    // Will do it later, once I understand how kmers are used
+                    // maybe too taxing...
+                    // also requires some kind of graph visit to be 100% correct
+                    for neighbour in graph.handle_edges_iter(handle, Direction::Right) {
+
+                        let neighbor_node = graph.get_node(&neighbour.id()).unwrap();
+                        let neighbor_seq = neighbor_node.sequence.to_string();
+                        let neighbor_length = neighbor_seq.len() as u64;
+
+                        let remaining_len = k - kmer.seq.len() as u64;
+                        let extension_len = min(remaining_len, neighbor_length);
+
+                        let mut ext_kmer = kmer.clone();
+
+                        let seq_to_add = neighbor_seq.substring(0 as usize, extension_len as usize).to_string();
+
+                        ext_kmer.extend_kmer(seq_to_add, neighbour);
+
+                        if ext_kmer.seq.len() == k as usize && !kmers.contains(&ext_kmer) {
+                            kmers.push(ext_kmer);
+                        }
+
+                    }
                 } else {
                     // Kmers must be unique for hashing
                     if !kmers.contains(&kmer) {
@@ -84,15 +102,32 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
     kmers
 }
 
-pub fn generate_kmers_hash(kmers : &Vec<kmer>) -> Vec<u64> {
-    let phf = Mphf::new(1.7, kmers.clone().as_slice());
+/* TODO
+pub fn extend_kmers_with_BFS(graph : &HashGraph, k : u64, startHandle : &Handle, curr_kmer : &mut Kmer) ->  {
+    let mut extended_kmers : Vec<Kmer> = Vec::new();
+    extended_kmers
+}
+ */
 
-    // Get hash value of all objects
-    let mut hashes = Vec::new();
-    for v in kmers {
-        hashes.push(phf.hash(&v));
+pub struct KmerPos {
+    seq : String,
+    start : u64,
+    end : u64
+}
+
+pub fn generate_kmers_hash(kmers : &Vec<Kmer>) -> AHashMap<String, KmerPos> {
+    let mut kmers_hashed: AHashMap<String, KmerPos> = AHashMap::new();
+
+    for kmer in kmers {
+        let pos = KmerPos {
+            seq: kmer.seq.clone(),
+            start: kmer.begin,
+            end: kmer.end
+        };
+        kmers_hashed.insert(kmer.seq.clone(), pos);
     }
-    hashes.sort();
 
-    hashes
+    
+
+    kmers_hashed
 }
