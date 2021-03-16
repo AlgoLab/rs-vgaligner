@@ -9,7 +9,7 @@ use bstr::ByteSlice;
 
 #[derive(Debug)]
 pub struct NodeRef {
-    seq_idx : u64,              // Represents the starting position on the fwd
+    pub(crate) seq_idx : u64,    // Represents the starting position on the fwd
     edge_idx : u64,             // Represents the starting position on the edge vector
     edges_to_node : u64         // Represents the number of incoming edges to a node
 }

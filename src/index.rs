@@ -8,7 +8,7 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
-use crate::kmer::{generate_kmers, generate_kmers_hash};
+use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward};
 
 #[derive(Default)]
 pub struct Index {
@@ -99,16 +99,21 @@ impl Index {
         let reverse = reverse_complement(&forward.as_str());
 
         println!("Forward is: {}", forward);
-        println!("Reverse is: {}", reverse);
+        //println!("Reverse is: {}", reverse);
         //println!("BV is: {:#?}", seq_bv);
         //println!("Node_ref is: {:#?}", node_ref);
 
-        let kmers_on_graph = generate_kmers(graph,kmer_length as u64, Some(max_degree));
-        println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_degree));
+        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
-        //let kmers_on_seq_fwd : Vec<KmerSeq> = generate_pos_on_fwd(kmers_on_graph, seq_bv, node_ref);
-        //let hashes = generate_kmers_hash(&kmers_on_seq_fwd);
-        //println!("hashes: {:#?}", hashes);
+        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
+        //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
+
+        let hashes = generate_kmers_hash(kmers_on_graph, kmers_on_seq_fwd);
+
+        for value in hashes {
+            println!("Key: {:#?} \nValue: {:#?} \n", value.0, value.1);
+        }
 
         index
     }
