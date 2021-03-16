@@ -7,10 +7,11 @@ use std::collections::VecDeque;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
 use bstr::ByteSlice;
 
+#[derive(Debug)]
 pub struct NodeRef {
-    seq_idx : u64,
-    edge_idx : u64,
-    edges_to_node : u64
+    seq_idx : u64,              // Represents the starting position on the fwd
+    edge_idx : u64,             // Represents the starting position on the edge vector
+    edges_to_node : u64         // Represents the number of incoming edges to a node
 }
 
 /// Finds the forward sequence encoded in a (not necessarily partially ordered) graph
@@ -59,6 +60,63 @@ pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
     seq_bv.set(bv_pos, true);
 
     forward
+}
+
+// Finds the forward sequence in a partially ordered graph, by following
+// the order of the handles. Also computes the bitvector representing
+// the node start positions in the forward, and the Node References.
+pub fn find_sequence_po(graph: &HashGraph, seq_bv: &mut BitVec,
+                       node_ref: &mut Vec<NodeRef>) -> String {
+
+    let mut forward : String = String::new();
+    let mut bv_pos : u64 = 0;
+    let mut edge_pos : u64 = 0;
+
+    // Sort both handles and edges since this is a PO
+    let mut graph_handles : Vec<Handle> = graph.handles_iter().collect();
+    graph_handles.sort();
+
+    let mut graph_edges : Vec<Edge> = graph.edges_iter().collect();
+    graph_edges.sort();
+
+    // Iterate over the handles
+    for current_handle in graph_handles {
+
+        // Find the sequence
+        let curr_node_id = current_handle.id();
+        let curr_node = graph.get_node(&curr_node_id).unwrap();
+        forward.push_str(curr_node.sequence.to_string().as_str());
+
+        // Create nodeRef
+        let incoming_edges : u64 = graph.handle_edges_iter(current_handle, Direction::Left).count() as u64;
+        let curr_node_ref = NodeRef {
+            seq_idx : bv_pos,
+            edge_idx : edge_pos,
+            edges_to_node : incoming_edges
+        };
+        node_ref.push(curr_node_ref);
+
+        // Advance the edge position so that it points to edges
+        // relative to the next handle
+        while edge_pos < graph_edges.len() as u64 {
+            let curr_edge = graph_edges.get(edge_pos as usize).unwrap();
+            if curr_edge.0 != current_handle {
+                break;
+            }
+            edge_pos += 1;
+        }
+
+        // Set bitvector
+        seq_bv.set(bv_pos, true); //end marker
+        bv_pos += (curr_node.sequence.to_string().len() as u64);
+
+    }
+
+    // Set end marker for bitvector
+    seq_bv.set(bv_pos, true);
+
+    forward
+
 }
 
 /// Returns the rank vector of a given bitvector bv

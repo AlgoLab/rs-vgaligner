@@ -11,10 +11,11 @@ pub struct Kmer {
     seq : String,
     begin : u64,
     end : u64,
-    //handle: Handle
-    handle : Vec<Handle>,
+    handle: Handle
+    //handle : Vec<Handle>,
 }
 
+/*
 impl Kmer {
     pub fn extend_kmer(&mut self, new_seq : String, new_handle : Handle) {
         self.seq.push_str(&new_seq);
@@ -22,6 +23,7 @@ impl Kmer {
         self.handle.push(new_handle);
     }
 }
+*/
 
 pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<Kmer> {
 
@@ -60,11 +62,12 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
                     seq : handle_seq.substring(begin as usize, end as usize).to_string(),
                     begin,
                     end,
-                    //handle
-                    handle : vec![handle]
+                    handle
+                    //handle : vec![handle]
                 };
 
                 if kmer.seq.len() < k as usize {
+                    /*
                     // maybe too taxing...
                     // also requires some kind of graph visit to be 100% correct
                     for neighbour in graph.handle_edges_iter(handle, Direction::Right) {
@@ -87,6 +90,7 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
                         }
 
                     }
+                    */
                 } else {
                     // Kmers must be unique for hashing
                     if !kmers.contains(&kmer) {
