@@ -62,9 +62,9 @@ pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
     forward
 }
 
-// Finds the forward sequence in a partially ordered graph, by following
-// the order of the handles. Also computes the bitvector representing
-// the node start positions in the forward, and the Node References.
+/// Finds the forward sequence in a partially ordered graph, by following
+/// the order of the handles. Also computes the bitvector representing
+/// the node start positions in the forward, and the Node References.
 pub fn find_sequence_po(graph: &HashGraph, seq_bv: &mut BitVec,
                        node_ref: &mut Vec<NodeRef>) -> String {
 

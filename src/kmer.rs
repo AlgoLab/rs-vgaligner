@@ -7,14 +7,15 @@ use substring::Substring;
 use ahash::AHashMap;
 use crate::utils::NodeRef;
 use bv::BitVec;
+use std::collections::VecDeque;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Kmer {
-    seq : String,
+    pub(crate) seq : String,
     begin : u64,
     end : u64,
-    handle: Handle
-    //handle : Vec<Handle>,
+    //handle: Handle
+    handle : Vec<Handle>,
 }
 
 impl PartialEq for Kmer {
@@ -23,7 +24,6 @@ impl PartialEq for Kmer {
     }
 }
 
-/*
 impl Kmer {
     pub fn extend_kmer(&mut self, new_seq : String, new_handle : Handle) {
         self.seq.push_str(&new_seq);
@@ -31,11 +31,12 @@ impl Kmer {
         self.handle.push(new_handle);
     }
 }
-*/
 
 pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<Kmer> {
 
     let mut kmers : Vec<Kmer> = Vec::new();
+
+    let mut prev_kmers_to_complete : VecDeque<Kmer> = VecDeque::new();
 
     // Sort both handles and edges since this is a PO
     let mut graph_handles : Vec<Handle> = graph.handles_iter().collect();
@@ -50,6 +51,10 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
         //TODO: add reverse later
         for handle_is_rev in &[true] {
             let handle : Handle;
+
+            let mut curr_kmers_to_complete : Vec<Kmer> = Vec::new();
+
+            assert_eq!(curr_kmers_to_complete.len(), 0);
 
             match handle_is_rev {
                 true => handle = *h,
@@ -70,70 +75,79 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
             let handle_seq = node.sequence.to_string();
             let handle_length = handle_seq.len() as u64;
 
-            // Can't generate single-node kmer if the seq is shorter than k
-            if handle_length < k {
-                continue
-            }
-
-            // NOTE: end is non-inclusive
-            for i in 0..(handle_length-k+1) {
+            // Generate kmers from single node
+            for i in 0..handle_length {
                 let begin = i;
                 let end = min(i+k, handle_length);
                 let mut kmer = Kmer {
                     seq : handle_seq.substring(begin as usize, end as usize).to_string(),
                     begin,
                     end,
-                    handle
-                    //handle : vec![handle]
+                    //handle
+                    handle : vec![handle]
                 };
-                //println!("Seq: {} Begin: {}, End: {}, Sub: {}", handle_seq,begin,end, kmer.seq);
 
-                if kmer.seq.len() < k as usize {
-                    /*
-                    // maybe too taxing...
-                    // also requires some kind of graph visit to be 100% correct
-                    for neighbour in graph.handle_edges_iter(handle, Direction::Right) {
-
-                        let neighbor_node = graph.get_node(&neighbour.id()).unwrap();
-                        let neighbor_seq = neighbor_node.sequence.to_string();
-                        let neighbor_length = neighbor_seq.len() as u64;
-
-                        let remaining_len = k - kmer.seq.len() as u64;
-                        let extension_len = min(remaining_len, neighbor_length);
-
-                        let mut ext_kmer = kmer.clone();
-
-                        let seq_to_add = neighbor_seq.substring(0 as usize, extension_len as usize).to_string();
-
-                        ext_kmer.extend_kmer(seq_to_add, neighbour);
-
-                        if ext_kmer.seq.len() == k as usize && !kmers.contains(&ext_kmer) {
-                            kmers.push(ext_kmer);
-                        }
-
-                    }
-                    */
-                } else {
-                    // Kmers must be unique for hashing
-                    if !kmers.contains(&kmer) {
+                if (kmer.seq.len() as u64) == k {
+                    //if !kmers.contains(&kmer) {
                         kmers.push(kmer);
-                    }
+                    //}
+                } else {
+                    curr_kmers_to_complete.push(kmer);
                 }
+
             }
 
+            // Try completing previously uncompleted kmers
+            // EXAMPLE: suppose k=4
+            // node i = AC, node i+1 = CGT
+            // incomplete kmer is AC (len 2), I want ACCG (len 4 = k)
+
+            if handle.id()  == NodeId::from(2) || handle.id() == NodeId::from(3) ||
+                handle.id() == NodeId::from(4) || handle.id() == NodeId::from(5) ||
+                handle.id() == NodeId::from(6){
+                println!("Nodeid: {}", handle.id());
+                println!("Prev: {:#?}", prev_kmers_to_complete);
+                println!("Curr-start: {:#?}", curr_kmers_to_complete);
+            }
+
+            while !prev_kmers_to_complete.is_empty() {
+
+                let mut incomplete_kmer = prev_kmers_to_complete.pop_front().unwrap();
+
+                let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
+                let str_to_add = handle_seq.substring(0, end as usize).to_string();
+                incomplete_kmer.extend_kmer(str_to_add, handle);
+
+                if (incomplete_kmer.seq.len() as u64) == k {
+                    println!("insert: {}", incomplete_kmer.seq);
+                    //if !kmers.contains(&incomplete_kmer) {
+                        kmers.push(incomplete_kmer);
+                    //}
+                } else {
+                    curr_kmers_to_complete.push(incomplete_kmer);
+                }
+
+            }
+
+            assert_eq!(prev_kmers_to_complete.len(), 0);
+
+            if handle.id()  == NodeId::from(2) || handle.id() == NodeId::from(3) ||
+                handle.id() == NodeId::from(4) || handle.id() == NodeId::from(5) ||
+                handle.id() == NodeId::from(6){
+                println!(">>>>>>End>>>>>>")
+                //println!("Nodeid: {}", handle.id());
+                //println!("Curr-end: {:#?}", curr_kmers_to_complete);
+            }
+
+            // Add kmers not completed in this iteration
+            curr_kmers_to_complete.iter()
+                .for_each(|inc_kmer| prev_kmers_to_complete.push_back(inc_kmer.clone()));
         }
 
     });
 
     kmers
 }
-
-/* TODO
-pub fn extend_kmers_with_BFS(graph : &HashGraph, k : u64, startHandle : &Handle, curr_kmer : &mut Kmer) ->  {
-    let mut extended_kmers : Vec<Kmer> = Vec::new();
-    extended_kmers
-}
- */
 
 #[derive(Debug)]
 pub struct KmerPos {
@@ -151,7 +165,9 @@ pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
     for kmer in kmers_on_graph {
 
         // -1 required because i-eth node id is i-1-eth in node list
-        let kmer_nodeId = kmer.handle.unpack_number()-1;
+        //let kmer_nodeId = kmer.handle.unpack_number()-1;
+        //TODO: remove
+        let kmer_nodeId = 0;
         //println!("id: {} value: {}",kmer_nodeId, kmer.seq);
         let noderef_kmer : &NodeRef = node_ref.get(kmer_nodeId as usize).unwrap();
         let start_pos_on_fwd = noderef_kmer.seq_idx + kmer.begin;

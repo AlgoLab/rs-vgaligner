@@ -104,16 +104,19 @@ impl Index {
         //println!("Node_ref is: {:#?}", node_ref);
 
         let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_degree));
+        for kmer in kmers_on_graph {
+            println!("{}", kmer.seq);
+        }
         //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
-        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
+        //let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
         //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
 
-        let hashes = generate_kmers_hash(kmers_on_graph, kmers_on_seq_fwd);
+        //let hashes = generate_kmers_hash(kmers_on_graph, kmers_on_seq_fwd);
 
-        for value in hashes {
-            println!("Key: {:#?} \nValue: {:#?} \n", value.0, value.1);
-        }
+        //for value in hashes {
+            //println!("Key: {:#?} \nValue: {:#?} \n", value.0, value.1);
+        //}
 
         index
     }
