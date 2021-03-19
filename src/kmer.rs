@@ -9,15 +9,18 @@ use crate::utils::NodeRef;
 use bv::BitVec;
 use std::collections::VecDeque;
 
-// TODO: I only need the first/starting handle, so a single handle
-// would probably be better..
+/// Struct that represents a kmer in the graph
 #[derive(Debug, Clone)]
 pub struct Kmer {
+    /// The sequence of the kmer
     pub(crate) seq : String,
+    /// The start position relative to the handle
     begin : u64,
+    /// The end position relative to the handle
     end : u64,
-    //handle: Handle
-    handle : Vec<Handle>,
+    /// The handle where the kmer starts (NOTE: this is only the start
+    /// the actual kmer may be on more than on handle)
+    pub(crate) handle: Handle
 }
 
 impl PartialEq for Kmer {
@@ -27,13 +30,15 @@ impl PartialEq for Kmer {
 }
 
 impl Kmer {
-    pub fn extend_kmer(&mut self, new_seq : String, new_handle : Handle) {
+    /// This function allows for a kmer to be extended, used when the
+    /// kmer is on more than one handle
+    fn extend_kmer(&mut self, new_seq : String) {
         self.seq.push_str(&new_seq);
         self.end += new_seq.len() as u64;
-        self.handle.push(new_handle);
     }
 }
 
+/// This function computes a list of the unique kmers in a given HashGraph
 pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<Kmer> {
 
     let mut kmers : Vec<Kmer> = Vec::new();
@@ -80,13 +85,13 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
 
                 let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
                 let str_to_add = handle_seq.substring(0, end as usize).to_string();
-                incomplete_kmer.extend_kmer(str_to_add, handle);
+                incomplete_kmer.extend_kmer(str_to_add);
 
                 if (incomplete_kmer.seq.len() as u64) == k {
 
-                    //if !kmers.contains(&incomplete_kmer) {
+                    if !kmers.contains(&incomplete_kmer) {
                         kmers.push(incomplete_kmer);
-                    //}
+                    }
 
                 } else {
                     curr_kmers_to_complete.push(incomplete_kmer);
@@ -113,14 +118,13 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
                     seq : handle_seq.substring(begin as usize, end as usize).to_string(),
                     begin,
                     end,
-                    //handle
-                    handle : vec![handle]
+                    handle
                 };
 
                 if (kmer.seq.len() as u64) == k {
-                    //if !kmers.contains(&kmer) {
+                    if !kmers.contains(&kmer) {
                         kmers.push(kmer);
-                    //}
+                    }
                 } else {
                     curr_kmers_to_complete.push(kmer);
                 }
@@ -137,15 +141,20 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
     kmers
 }
 
+/// Struct that represents the kmer positions on the forward
 #[derive(Debug)]
 pub struct KmerPos {
     //seq : String,
-    start : u64,
-    end : u64
+    /// The start position of the kmer on the forward
+    pub(crate) start : u64,
+    /// The end position of the kmer on the forward
+    pub(crate) end : u64
 }
 
+/// This function converts kmer positions on the graph to kmer positions on the forward
+/// (this is effectively a Kmer -> KmerPos conversion)
 pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
-                               seq_bw : &BitVec, node_ref : &Vec<NodeRef>  ) -> Vec<KmerPos> {
+                               seq_bw : &BitVec, node_ref : &Vec<NodeRef>) -> Vec<KmerPos> {
     let mut kmers_on_fwd : Vec<KmerPos> = Vec::new();
 
     for kmer in kmers_on_graph {
@@ -153,7 +162,7 @@ pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
         // -1 required because i-eth node id is i-1-eth in node list
         // see TODO in kmer
 
-        let kmer_handle = kmer.handle.get(0).unwrap();
+        let kmer_handle = kmer.handle;
         let kmer_nodeId = kmer_handle.unpack_number()-1;
 
         let noderef_kmer : &NodeRef = node_ref.get(kmer_nodeId as usize).unwrap();
@@ -171,6 +180,8 @@ pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
     kmers_on_fwd
 }
 
+/// This function returns a HashMap representing the kmers and their positions,
+/// having as key the kmer seq, and as values a KmerPos
 pub fn generate_kmers_hash(kmers_on_graph : Vec<Kmer>, kmers_on_fwd : Vec<KmerPos>) -> AHashMap<String, KmerPos> {
     let mut kmers_hashed: AHashMap<String, KmerPos> = AHashMap::new();
 

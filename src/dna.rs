@@ -1,5 +1,7 @@
 // Reverse-complement adapted from: https://github.com/delagoya/rusty-bio
-// This highlights how powerful Rust's match is!
+
+/// This function returns the reverse-complement of a sequence
+/// given as input.
 pub fn reverse_complement(sequence : &str) -> String {
     let mut rc_seq = String::with_capacity(sequence.len());
 
@@ -14,7 +16,6 @@ pub fn reverse_complement(sequence : &str) -> String {
     rc_seq
 }
 
-// By using match bases can be switched or...
 fn switch_base(c:char) -> char {
     match c {
         'a' => 't',
@@ -31,7 +32,6 @@ fn switch_base(c:char) -> char {
     }
 }
 
-// ...one can easily check if some condition holds or not
 fn is_dna(base: char) -> bool {
     match base {
         'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U'| 'u'  => true,

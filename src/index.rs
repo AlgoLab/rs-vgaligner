@@ -5,10 +5,11 @@ use handlegraph::handlegraph::HandleGraph;
 use bstr::ByteSlice;
 use std::fs::File;
 use std::io::{Write, Read};
-use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po};
+use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po, find_graph_seq_length};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
 use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward};
+use crate::io::print_bitvec;
 
 #[derive(Default)]
 pub struct Index {
@@ -55,17 +56,6 @@ pub struct Node_ref {
     count_prev : u64,
 }
 
-// TODO: add remaining traits etc.
-
-/*pub trait IndexUtilities {
-    fn build(graph : &HashGraph,
-             kmer_length : &u64,
-             max_furcations : &u64,
-             max_degree : &u64,
-             sampling_rate : &f32,
-             out_prefix : &str) -> Index;
-    //fn load() -> Index;
-}*/
 
 impl Index {
 
@@ -80,15 +70,11 @@ impl Index {
         // Create the new index
         let mut index = Index::new();
 
+        // Get the number of nodes in the graph
         let number_nodes = graph.graph.len();
 
-        // Find total length of the sequences in the graph
-        let mut total_length = 0;
-        for value in graph.handles_iter() {
-            let node = graph.get_node(&value.id()).unwrap();
-            total_length += node.sequence.len() as u64;
-        }
-        index.seq_length = total_length;
+        // Get the length of the sequence encoded by the graph
+        let total_length = find_graph_seq_length(graph);
 
         // Mark node starts in forward
         let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
@@ -100,11 +86,13 @@ impl Index {
 
         println!("Forward is: {}", forward);
         //println!("Reverse is: {}", reverse);
-        //println!("BV is: {:#?}", seq_bv);
-        //println!("Node_ref is: {:#?}", node_ref);
+        print!("Bitvec is:  ");
+        print_bitvec(&seq_bv);
+        println!("\n");
+        //println!("NodeRef is: {:#?}", node_ref);
 
         let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_degree));
-        println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
         let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
         //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);

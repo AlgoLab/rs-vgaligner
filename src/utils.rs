@@ -14,6 +14,16 @@ pub struct NodeRef {
     edges_to_node : u64         // Represents the number of incoming edges to a node
 }
 
+/// Finds the length of the sequence encoded by the graph
+pub fn find_graph_seq_length(graph : &HashGraph) -> u64 {
+    let mut total_length = 0;
+    for value in graph.handles_iter() {
+        let node = graph.get_node(&value.id()).unwrap();
+        total_length += node.sequence.len() as u64;
+    }
+    total_length
+}
+
 /// Finds the forward sequence encoded in a (not necessarily partially ordered) graph
 /// This function uses a BFS visit, and retrieves the forward sequence from each
 /// node it visits, then concatenates them into a string.

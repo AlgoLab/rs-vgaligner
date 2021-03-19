@@ -4,14 +4,13 @@ use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use clap::{App, Arg};
 
-mod index;
-mod utils;
-mod dna;
-mod kmer;
+pub mod index;
+pub mod utils;
+pub mod dna;
+pub mod kmer;
+pub mod io;
 
-//use crate::index::{Index,IndexUtilities};
 use crate::index::Index;
-use crate::dna::reverse_complement;
 
 fn main() {
 
