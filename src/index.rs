@@ -8,8 +8,10 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po, find_graph_seq_length};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
-use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward};
-use crate::io::print_bitvec;
+use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf};
+use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kmers, verify_kmers_2};
+use ahash::RandomState;
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct Index {
@@ -86,22 +88,28 @@ impl Index {
 
         println!("Forward is: {}", forward);
         //println!("Reverse is: {}", reverse);
-        print!("Bitvec is:  ");
+        print!("Bitvec is: ",);
         print_bitvec(&seq_bv);
         println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
         let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_degree));
-        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        println!("kmers_on_graph: {:#?}", kmers_on_graph);
+
+        // Print to fasta files
+        print_seq_to_file(&forward, &PathBuf::from("./output/ref.fa"));
+        print_kmers_to_file(&kmers_on_graph, &PathBuf::from("./output/kmers.fa"));
+        //verify_kmers(&forward, &kmers_on_graph, &PathBuf::from("./output/alignment.txt"));
 
         let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
         //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
+        verify_kmers_2(&forward, &kmers_on_graph, &kmers_on_seq_fwd, &PathBuf::from("./output/kmers_on_fwd_2.txt"));
 
-        let hashes = generate_kmers_hash(kmers_on_graph, kmers_on_seq_fwd);
-
-        //for value in hashes {
-            //println!("Key: {:#?} \nValue: {:#?} \n", value.0, value.1);
-        //}
+        // TODO: seed should be fixed?
+        let hash_build = RandomState::new();
+        let hashes = generate_hash(&kmers_on_graph, &hash_build);
+        let kmer_mphf_table = generate_mphf(&hashes);
+        println!("{:#?}", kmer_mphf_table);
 
         index
     }

@@ -8,6 +8,9 @@ use ahash::AHashMap;
 use crate::utils::NodeRef;
 use bv::BitVec;
 use std::collections::VecDeque;
+use std::hash::BuildHasher;
+use ahash::RandomState;
+use ahash::CallHasher;
 
 /// Struct that represents a kmer in the graph
 #[derive(Debug, Clone)]
@@ -199,4 +202,19 @@ pub fn generate_kmers_hash(kmers_on_graph : Vec<Kmer>, kmers_on_fwd : Vec<KmerPo
     
 
     kmers_hashed
+}
+
+pub fn generate_hash(kmers_on_graph : &Vec<Kmer>, hash_builder : &RandomState) -> Vec<u64> {
+    let mut hashes : Vec<u64> = Vec::new();
+
+    kmers_on_graph.iter().for_each(|kmer|{
+        hashes.push(u32::get_hash(&kmer.seq, hash_builder));
+    });
+
+    hashes
+}
+
+pub fn generate_mphf(kmer_hashes : &Vec<u64>) -> Mphf<u64> {
+    let phf = Mphf::new(1.7, &kmer_hashes.clone());
+    phf
 }
