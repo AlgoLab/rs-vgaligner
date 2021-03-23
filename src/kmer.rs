@@ -42,7 +42,7 @@ impl Kmer {
 }
 
 /// This function computes a list of the unique kmers in a given HashGraph
-pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> Vec<Kmer> {
+pub fn generate_kmers(graph : &HashGraph, k : u64, edge_max : Option<u64>, degree_max : Option<u64>) -> Vec<Kmer> {
 
     let mut kmers : Vec<Kmer> = Vec::new();
 
@@ -69,6 +69,14 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, degree_max : Option<u64>) -> 
             match handle_is_rev {
                 true => handle = *h,
                 false => handle = h.flip()
+            }
+
+            if let Some(degree_max) = degree_max {
+                let mut curr_count : u64 = 0;
+                graph.handle_edges_iter(handle, Direction::Left).for_each(|_| curr_count += 1);
+                if curr_count > degree_max {
+                    continue;
+                }
             }
 
             // Get current handle

@@ -93,7 +93,7 @@ impl Index {
         println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
-        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_degree));
+        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(0), Some(max_degree));
         println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
         // Print to fasta files
