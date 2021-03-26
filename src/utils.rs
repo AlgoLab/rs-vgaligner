@@ -7,11 +7,11 @@ use std::collections::VecDeque;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
 use bstr::ByteSlice;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct NodeRef {
     pub(crate) seq_idx : u64,    // Represents the starting position on the fwd
-    edge_idx : u64,             // Represents the starting position on the edge vector
-    edges_to_node : u64         // Represents the number of incoming edges to a node
+    pub(crate) edge_idx : u64,             // Represents the starting position on the edge vector
+    pub(crate) edges_to_node : u64         // Represents the number of incoming edges to a node
 }
 
 /// Finds the length of the sequence encoded by the graph
