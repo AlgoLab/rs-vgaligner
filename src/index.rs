@@ -177,9 +177,12 @@ mod test {
         assert_eq!("ACTGAGCA", find_sequence_po(&graph, &mut seq_bv, &mut node_ref));
 
         use bv::*;
+        // The bitvector marks node starts, so since nodes in the linearization are
+        // A -> CT -> GA -> GCA the bitvector should be...
         assert_eq!(bit_vec![true, true, false, true, false, true, false, false, true], seq_bv);
 
         assert_eq!(node_ref.len(), 4);
+        
         assert_eq!(*node_ref.get(0).unwrap(), NodeRef { seq_idx: 0, edge_idx: 0, edges_to_node: 0 });
         assert_eq!(*node_ref.get(1).unwrap(), NodeRef { seq_idx: 1, edge_idx: 2, edges_to_node: 1 });
         assert_eq!(*node_ref.get(2).unwrap(), NodeRef { seq_idx: 3, edge_idx: 3, edges_to_node: 1 });
@@ -241,7 +244,72 @@ mod test {
         for i in 0..kmers_on_graph.len() {  // kmers_on_seq_fwd.len() would work as well
             let graph_kmer : &Kmer = kmers_on_graph.get(i).unwrap();
             let fwd_kmer : &KmerPos = kmers_on_seq_fwd.get(i).unwrap();
+
+            // Check if the kmer retrieved from the graph (graph_kmer) is equal to
+            // the substring of the forward starting and ending in the positions from fwd_kmer
             assert_eq!(graph_kmer.seq, forward.substring(fwd_kmer.start as usize, fwd_kmer.end as usize))
         }
+    }
+
+    #[test]
+    fn test_simple_path() {
+        let mut graph = HashGraph::new();
+
+        // ACG -> TTT -> CA
+        let h1 = graph.create_handle("ACG".as_bytes(), 1);
+        let h2 = graph.create_handle("TTT".as_bytes(), 2);
+        let h3 = graph.create_handle("CA".as_bytes(), 3);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h2, h3));
+
+        // Generate the forward
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
+        let mut node_ref : Vec<NodeRef> = Vec::new();
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        assert_eq!(total_length, 8);
+        assert_eq!("ACGTTTCA", forward);
+        assert_eq!(*node_ref.get(1).unwrap(),  NodeRef { seq_idx: 3, edge_idx: 1, edges_to_node: 1 });
+        assert_eq!(*node_ref.get(2).unwrap(),  NodeRef { seq_idx: 6, edge_idx: 2, edges_to_node: 1 });
+
+        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+        assert_eq!(kmers_on_graph.len(), 6);
+
+        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
+    }
+
+    #[test]
+    fn test_self_loop() {
+        let mut graph = HashGraph::new();
+
+        //          v--
+        // ACG -> TTT | -> CA
+
+        let h1 = graph.create_handle("ACG".as_bytes(), 1);
+        let h2 = graph.create_handle("TTT".as_bytes(), 2);
+        let h3 = graph.create_handle("CA".as_bytes(), 3);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h2, h2));
+        graph.create_edge(&Edge(h2, h3));
+
+        // Generate the forward
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
+        let mut node_ref : Vec<NodeRef> = Vec::new();
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        assert_eq!(total_length, 8);
+        assert_eq!("ACGTTTCA", forward);
+        assert_eq!(*node_ref.get(1).unwrap(),  NodeRef { seq_idx: 3, edge_idx: 1, edges_to_node: 2 });
+        // Note that edge_idx is +1 when compared to the previous test, i.e. there is one more edge
+        // representing the loop
+        assert_eq!(*node_ref.get(2).unwrap(),  NodeRef { seq_idx: 6, edge_idx: 3, edges_to_node: 1 });
+
+        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+        assert_eq!(kmers_on_graph.len(), 6);
+
     }
 }

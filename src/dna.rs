@@ -45,12 +45,6 @@ fn test_is_dna() {
 }
 
 #[test]
-#[should_panic]
-fn test_is_dna_false() {
-    assert!(is_dna('z'))
-}
-
-#[test]
 fn test_revcomp() {
     // ATGC =>  CGTA => GCAT
     assert_eq!("GCAT".to_string(), reverse_complement("ATGC"))
