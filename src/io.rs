@@ -12,7 +12,7 @@ pub fn print_kmers(kmers_on_graph : &Vec<Kmer>, kmers_on_seq_fwd : &Vec<KmerPos>
         let fwd_kmer = kmers_on_seq_fwd.get(i).unwrap();
 
         println!("Seq: {},\nStart_fwd: {},\nEnd_fwd: {},\nHandles: {:#?}\n",
-                 graph_kmer.seq, fwd_kmer.start, fwd_kmer.end, graph_kmer.handle);
+                 graph_kmer.seq, fwd_kmer.start, fwd_kmer.end, graph_kmer.handles.get(0).unwrap());
     }
 }
 
@@ -38,6 +38,24 @@ pub fn print_kmers_to_file(kmers : &Vec<Kmer>, path : &PathBuf) {
     for i in 0..kmers.len() {
         let curr_kmer = kmers.get(i).unwrap();
         let index_str = format!(">kmer-{}\n", i);
+        let kmers_str = format!("{}\n", curr_kmer.seq);
+        file.write_all(index_str.as_bytes());
+        file.write_all(kmers_str.as_bytes());
+    }
+}
+
+pub fn print_kmers_to_file_split(kmers_on_fwd : &Vec<Kmer>, kmers_on_rev : &Vec<Kmer>, path : &PathBuf) {
+    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
+    for i in 0..kmers_on_fwd.len() {
+        let curr_kmer = kmers_on_fwd.get(i).unwrap();
+        let index_str = format!(">kmer-fwd-{}\n", i);
+        let kmers_str = format!("{}\n", curr_kmer.seq);
+        file.write_all(index_str.as_bytes());
+        file.write_all(kmers_str.as_bytes());
+    }
+    for i in 0..kmers_on_rev.len() {
+        let curr_kmer = kmers_on_rev.get(i).unwrap();
+        let index_str = format!(">kmer-rev-{}\n", i);
         let kmers_str = format!("{}\n", curr_kmer.seq);
         file.write_all(index_str.as_bytes());
         file.write_all(kmers_str.as_bytes());

@@ -8,8 +8,8 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po, find_graph_seq_length};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
-use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf};
-use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kmers, verify_kmers_2};
+use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf, generate_kmers_rev, merge_kmers};
+use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kmers, verify_kmers_2, print_kmers_to_file_split};
 use ahash::RandomState;
 use std::path::PathBuf;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
@@ -94,7 +94,16 @@ impl Index {
         println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
-        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        let kmers_on_graph_fwd : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
+
+        let kmers_on_graph_rev : Vec<Kmer> = generate_kmers_rev(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        //println!("kmers_on_graph_rev: {:#?}", kmers_on_graph_rev);
+
+        let kmers_path_split = format!("./output/{}kmers-split.fa", out_prefix);
+        print_kmers_to_file_split(&kmers_on_graph_fwd, &kmers_on_graph_rev, &PathBuf::from(kmers_path_split));
+
+        let kmers_on_graph = merge_kmers(kmers_on_graph_fwd, kmers_on_graph_rev);
         println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
         // Store reference in a fasta file
@@ -104,6 +113,7 @@ impl Index {
         let kmers_path = format!("./output/{}kmers.fa", out_prefix);
         print_kmers_to_file(&kmers_on_graph, &PathBuf::from(kmers_path));
 
+        /*
         let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
         //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
         let kmers_visualization_path = format!("./output/{}kmers_on_fwd.txt", out_prefix);
@@ -133,6 +143,7 @@ impl Index {
 
             println!("Backward handle {:#?} has nodeId {} with seq {}\n", handle, handle.unpack_number(), test2);
         }
+         */
 
         index
     }
@@ -144,10 +155,11 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::hashgraph::Node;
     use substring::Substring;
+    use crate::kmer::generate_kmers_rev;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
-    /// 1: CA            4: GCA
+    /// 1:  A            4: GCA
     ///        \ 3: GA |
     fn create_simple_graph() -> HashGraph {
         let mut graph : HashGraph = HashGraph::new();
@@ -194,6 +206,11 @@ mod test {
         let graph = create_simple_graph();
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+        //println!("{:#?}", kmers_on_graph);
+
+        let kmers_on_graph_rev = generate_kmers_rev(&graph, 3, Some(100), Some(100));
+        println!("{:#?}", kmers_on_graph_rev);
+
         assert_eq!(kmers_on_graph.len(), 6);
 
         // Remember: forward is "ACTGAGCA", so the 3-mers are:
