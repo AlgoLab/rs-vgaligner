@@ -13,6 +13,7 @@ use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kme
 use ahash::RandomState;
 use std::path::PathBuf;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
+use rayon::prelude::*;
 
 #[derive(Default)]
 pub struct Index {
@@ -206,10 +207,10 @@ mod test {
         let graph = create_simple_graph();
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
-        //println!("{:#?}", kmers_on_graph);
+        println!("{:#?}", kmers_on_graph);
 
         let kmers_on_graph_rev = generate_kmers_rev(&graph, 3, Some(100), Some(100));
-        println!("{:#?}", kmers_on_graph_rev);
+        //println!("{:#?}", kmers_on_graph_rev);
 
         assert_eq!(kmers_on_graph.len(), 6);
 
