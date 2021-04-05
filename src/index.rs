@@ -8,7 +8,7 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po, find_graph_seq_length};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
-use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf, generate_kmers_rev, merge_kmers};
+use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf, merge_kmers};
 use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kmers, verify_kmers_2, print_kmers_to_file_split};
 use ahash::RandomState;
 use std::path::PathBuf;
@@ -95,17 +95,17 @@ impl Index {
         println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
-        let kmers_on_graph_fwd : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
         //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
-        let kmers_on_graph_rev : Vec<Kmer> = generate_kmers_rev(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        //let kmers_on_graph_rev : Vec<Kmer> = generate_kmers_rev(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
         //println!("kmers_on_graph_rev: {:#?}", kmers_on_graph_rev);
 
         let kmers_path_split = format!("./output/{}kmers-split.fa", out_prefix);
-        print_kmers_to_file_split(&kmers_on_graph_fwd, &kmers_on_graph_rev, &PathBuf::from(kmers_path_split));
+        //print_kmers_to_file_split(&kmers_on_graph_fwd, &kmers_on_graph_rev, &PathBuf::from(kmers_path_split));
 
-        let kmers_on_graph = merge_kmers(kmers_on_graph_fwd, kmers_on_graph_rev);
-        println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        //let kmers_on_graph = merge_kmers(kmers_on_graph_fwd, kmers_on_graph_rev);
+        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
         // Store reference in a fasta file
         let reference_path = format!("./output/{}ref.fa", out_prefix);
@@ -156,7 +156,6 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::hashgraph::Node;
     use substring::Substring;
-    use crate::kmer::generate_kmers_rev;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
@@ -209,29 +208,10 @@ mod test {
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
         println!("{:#?}", kmers_on_graph);
 
-        let kmers_on_graph_rev = generate_kmers_rev(&graph, 3, Some(100), Some(100));
-        //println!("{:#?}", kmers_on_graph_rev);
+        assert_eq!(kmers_on_graph.len(), 12);
 
-        assert_eq!(kmers_on_graph.len(), 6);
-
-        // Remember: forward is "ACTGAGCA", so the 3-mers are:
-        assert_eq!(kmers_on_graph.get(0).unwrap().seq, "ACT");
-        assert_eq!(kmers_on_graph.get(1).unwrap().seq, "CTG");
-        assert_eq!(kmers_on_graph.get(2).unwrap().seq, "TGA");
-        assert_eq!(kmers_on_graph.get(3).unwrap().seq, "GAG");
-        assert_eq!(kmers_on_graph.get(4).unwrap().seq, "AGC");
-        assert_eq!(kmers_on_graph.get(5).unwrap().seq, "GCA");
-
-        // With k == fwd.len() (8 in this case) only 1 kmer should be returned
-        let kmers_on_graph_100 = generate_kmers(&graph, 8, Some(100), Some(100));
-        assert_eq!(kmers_on_graph_100.len(), 1);
-        assert_eq!(kmers_on_graph_100.get(0).unwrap().seq, "ACTGAGCA");
-
-        // With k == fwd.len()-1 (7 in this case) only 2 kmers should be returned
-        let kmers_on_graph_100 = generate_kmers(&graph, 7, Some(100), Some(100));
-        assert_eq!(kmers_on_graph_100.len(), 2);
-        assert_eq!(kmers_on_graph_100.get(0).unwrap().seq, "ACTGAGC");
-        assert_eq!(kmers_on_graph_100.get(1).unwrap().seq, "CTGAGCA");
+        let kmers_on_graph_100 = generate_kmers(&graph, 6, Some(100), Some(100));
+        assert_eq!(kmers_on_graph_100.len(), 4);
 
         // Check if it crashes with k=100...
         let kmers_on_graph_100 = generate_kmers(&graph, 100, Some(100), Some(100));

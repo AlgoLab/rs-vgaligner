@@ -23,9 +23,12 @@ pub struct Kmer {
     begin : u64,
     /// The end position relative to the handle
     end : u64,
-    /// The handle where the kmer starts (NOTE: this is only the start
-    /// the actual kmer may be on more than on handle)
-    pub(crate) handles : Vec<Handle>
+    /// The handles where the kmer is
+    pub(crate) handles : Vec<Handle>,
+    /// The orientation of the handles
+    handle_orient : bool,
+    /// The number of forks the kmer has been involved in
+    forks : u64
 }
 
 impl PartialEq for Kmer {
@@ -111,140 +114,136 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, edge_max : Option<u64>, degre
     let mut sorted_graph_handles : Vec<Handle> = graph.handles_iter().collect();
     sorted_graph_handles.sort();
 
-    for handle in sorted_graph_handles {
+    for forward_handle in sorted_graph_handles {
 
-        // Get current node/handle
-        let mut handle_seq = graph.sequence(handle).into_string_lossy();
-        let mut handle_length = handle_seq.len() as u64;
+        let mut handle : Handle;
+        let mut orient : bool;
 
-        // Then try generating the kmers from the given node
-        let mut incomplete_kmers : Vec<Kmer> = Vec::new();
+        for handle_orient in &[true, false] {
 
-        for i in 0..handle_length {
-            let begin = i;
-            let end = min(i+k, handle_length);
-            let mut kmer = Kmer {
-                seq : handle_seq.substring(begin as usize, end as usize).to_string(),
-                begin,
-                end,
-                handles : vec![handle]
-            };
-
-            if (kmer.seq.len() as u64) == k {
-                if !complete_kmers.contains(&kmer) {
-                    complete_kmers.push(kmer);
+            match handle_orient {
+                true => {
+                    handle = forward_handle;
+                    orient = true;
                 }
-            } else {
-                for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
-                    let mut inc_kmer = kmer.clone();
-                    inc_kmer.add_handle_to_complete(neighbor);
-                    incomplete_kmers.push(inc_kmer);
+                false => {
+                    handle = forward_handle.flip();
+                    orient = false;
                 }
             }
-        }
 
-        // Then complete all incomplete kmers
-        while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
-
-            let last_handle = incomplete_kmer.handles.pop().unwrap();
-            handle_seq = graph.sequence(last_handle).into_string_lossy();
-            handle_length = handle_seq.len() as u64;
-
-            let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
-            let str_to_add = handle_seq.substring(0, end as usize).to_string();
-            incomplete_kmer.extend_kmer(str_to_add, handle);
-
-            if (incomplete_kmer.seq.len() as u64) == k {
-                if !complete_kmers.contains(&incomplete_kmer) {
-                    complete_kmers.push(incomplete_kmer);
-                }
-
-            } else {
-                // NOTE: if there is no neighbor, the kmer does not get re-added
-                // to the incomplete ones, so that the external loop may end
-                for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
-                    let mut inc_kmer = incomplete_kmer.clone();
-                    inc_kmer.add_handle_to_complete(neighbor);
-                    incomplete_kmers.push(inc_kmer);
+            if let Some(degree_max) = degree_max {
+                let mut curr_count : u64 = 0;
+                graph.handle_edges_iter(handle, Direction::Right).for_each(|_| {
+                    curr_count += 1;
+                });
+                if curr_count > degree_max {
+                    // Skip current orientation
+                    continue;
                 }
             }
+
+            // Get current node/handle
+            let mut handle_seq = graph.sequence(handle).into_string_lossy();
+            let mut handle_length = handle_seq.len() as u64;
+
+            // Then try generating the kmers from the given node
+            let mut incomplete_kmers : Vec<Kmer> = Vec::new();
+
+            for i in 0..handle_length {
+                let begin = i;
+                let end = min(i+k, handle_length);
+                let mut kmer = Kmer {
+                    seq : handle_seq.substring(begin as usize, end as usize).to_string(),
+                    begin,
+                    end,
+                    handles : vec![handle],
+                    handle_orient : orient,
+                    forks : 0
+                };
+
+                if (kmer.seq.len() as u64) == k {
+                    if !complete_kmers.contains(&kmer) {
+                        complete_kmers.push(kmer);
+                    }
+                } else {
+
+                    let mut next_count : u64 = 0;
+                    if edge_max.is_some() || degree_max.is_some() {
+                        graph.handle_edges_iter(handle, Direction::Right).for_each(|_| {
+                            next_count += 1;
+                        });
+                    }
+
+                    if (degree_max.is_none() && edge_max.is_none()) ||
+                        (degree_max.is_some() && next_count < degree_max.unwrap()) ||
+                        (edge_max.is_some() && kmer.forks < edge_max.unwrap()) {
+
+                        for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
+                            let mut inc_kmer = kmer.clone();
+                            inc_kmer.add_handle_to_complete(neighbor);
+
+                            if next_count > 1 {
+                                inc_kmer.forks += 1;
+                            }
+
+                            incomplete_kmers.push(inc_kmer);
+                        }
+                    }
+
+                }
+            }
+
+            // Then complete all incomplete kmers
+            while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
+
+                handle = incomplete_kmer.handles.pop().unwrap();
+                handle_seq = graph.sequence(handle).into_string_lossy();
+                handle_length = handle_seq.len() as u64;
+
+                let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
+                let str_to_add = handle_seq.substring(0, end as usize).to_string();
+                incomplete_kmer.extend_kmer(str_to_add, handle);
+
+                if (incomplete_kmer.seq.len() as u64) == k {
+                    if !complete_kmers.contains(&incomplete_kmer) {
+                        complete_kmers.push(incomplete_kmer);
+                    }
+
+                } else {
+                    // NOTE: if there is no neighbor, the kmer does not get re-added
+                    // to the incomplete ones, so that the external loop can end
+                    for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
+
+                        let mut next_count : u64 = 0;
+                        if edge_max.is_some() || degree_max.is_some() {
+                            graph.handle_edges_iter(handle, Direction::Right).for_each(|_| {
+                                next_count += 1;
+                            });
+                        }
+
+                        if (degree_max.is_none() && edge_max.is_none()) ||
+                            (degree_max.is_some() && next_count < degree_max.unwrap()) ||
+                            (edge_max.is_some() && incomplete_kmer.forks < edge_max.unwrap()){
+
+                            let mut inc_kmer = incomplete_kmer.clone();
+                            inc_kmer.add_handle_to_complete(neighbor);
+
+                            if next_count > 1 {
+                                inc_kmer.forks += 1;
+                            }
+
+                            incomplete_kmers.push(inc_kmer);
+                        }
+
+                    }
+                }
+            }
+
+            assert!(incomplete_kmers.is_empty());
         }
-
-        assert!(incomplete_kmers.is_empty());
-
     }
 
-    complete_kmers
-}
-
-pub fn generate_kmers_rev(graph : &HashGraph, k : u64, edge_max : Option<u64>, degree_max : Option<u64>) -> Vec<Kmer> {
-    let mut complete_kmers : Vec<Kmer> = Vec::new();
-
-    // Sort both handles
-    let mut sorted_graph_handles : Vec<Handle> = graph.handles_iter().collect();
-    sorted_graph_handles.sort();
-    sorted_graph_handles.reverse();
-
-    let mut incomplete_kmers : HashMap<Handle, VecDeque<Kmer>> = HashMap::with_capacity(sorted_graph_handles.len());
-    sorted_graph_handles.iter().for_each(|h| { incomplete_kmers.insert(h.flip().clone(), VecDeque::new()); });
-
-    for handle_forward in sorted_graph_handles {
-
-        let handle = handle_forward.flip();
-
-        // Get current node/handle
-        let handle_seq = graph.sequence(handle).into_string_lossy();
-        let handle_length = handle_seq.len() as u64;
-
-        // First try completing incomplete kmers
-        let mut curr_incomplete_kmers = incomplete_kmers.get_mut(&handle).unwrap().clone();
-        while let Some(mut incomplete_kmer) = curr_incomplete_kmers.pop_front() {
-
-            let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
-            let str_to_add = handle_seq.substring(0, end as usize).to_string();
-            incomplete_kmer.extend_kmer(str_to_add, handle);
-
-            if (incomplete_kmer.seq.len() as u64) == k {
-                if !complete_kmers.contains(&incomplete_kmer) {
-                    complete_kmers.push(incomplete_kmer);
-                }
-
-            } else {
-                // TODO: kmer should contain multiple handles
-                for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
-                    incomplete_kmers.get_mut(&neighbor).unwrap().push_back(incomplete_kmer.clone());
-                }
-
-            }
-        }
-
-        assert!(curr_incomplete_kmers.is_empty());
-        incomplete_kmers.get_mut(&handle).unwrap().clear();
-
-        // Then try generating the kmers from the given node
-        for i in 0..handle_length {
-            let begin = i;
-            let end = min(i+k, handle_length);
-            let mut kmer = Kmer {
-                seq : handle_seq.substring(begin as usize, end as usize).to_string(),
-                begin,
-                end,
-                handles : vec![handle]
-            };
-
-            if (kmer.seq.len() as u64) == k {
-                if !complete_kmers.contains(&kmer) {
-                    complete_kmers.push(kmer);
-                }
-            } else {
-                // TODO: kmer should contain multiple handles
-                for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
-                    incomplete_kmers.get_mut(&neighbor).unwrap().push_back(kmer.clone());
-                }
-            }
-        }
-
-    }
 
     complete_kmers
 }
