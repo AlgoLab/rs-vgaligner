@@ -13,6 +13,7 @@ use ahash::RandomState;
 use ahash::CallHasher;
 use bstr::ByteVec;
 use rayon::prelude::*;
+use handlegraph::pathgraph::PathHandleGraph;
 
 /// Struct that represents a kmer in the graph
 #[derive(Debug, Clone)]
@@ -246,6 +247,81 @@ pub fn generate_kmers(graph : &HashGraph, k : u64, edge_max : Option<u64>, degre
 
 
     complete_kmers
+}
+
+pub fn generate_kmers_linearly(graph : &HashGraph, k : u64, edge_max : Option<u64>, degree_max : Option<u64>) -> Vec<Kmer> {
+    let mut kmers : Vec<Kmer> = Vec::new();
+    let mut prev_kmers_to_complete : VecDeque<Kmer> = VecDeque::new();
+
+    //println!("Paths are: {:#?}", graph.paths.values());
+    for path_id in graph.paths_iter() {
+
+        let path = graph.get_path(path_id).unwrap();
+
+        println!("Path: {:#?}", path);
+        prev_kmers_to_complete.clear();
+
+        for handle in &path.nodes {
+
+            let mut curr_kmers_to_complete : Vec<Kmer> = Vec::new();
+
+            // Get current handle
+            let handle_seq = graph.sequence(*handle).into_string_lossy();
+            let handle_length = handle_seq.len() as u64;
+
+            // First try completing previously uncompleted kmers
+            // EXAMPLE: suppose k=4
+            // node i-1 = AC, node i = CGT
+            // incomplete kmer is AC (len 2), I want ACCG (len 4 = k)
+            // also C + CGT
+            while let Some(mut incomplete_kmer) = prev_kmers_to_complete.pop_front() {
+                let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
+                let str_to_add = handle_seq.substring(0, end as usize).to_string();
+                incomplete_kmer.extend_kmer(str_to_add, *handle);
+
+                if (incomplete_kmer.seq.len() as u64) == k {
+
+                    if !kmers.contains(&incomplete_kmer) {
+                        kmers.push(incomplete_kmer);
+                    }
+
+                } else {
+                    curr_kmers_to_complete.push(incomplete_kmer);
+                }
+
+            }
+
+            // Then try to generate current node kmers
+            for i in 0..handle_length {
+                let begin = i;
+                let end = min(i+k, handle_length);
+                let mut kmer = Kmer {
+                    seq : handle_seq.substring(begin as usize, end as usize).to_string(),
+                    begin,
+                    end,
+                    handles : vec![*handle],
+                    handle_orient : true,
+                    forks: 0
+                };
+
+                if (kmer.seq.len() as u64) == k {
+                    if !kmers.contains(&kmer) {
+                        kmers.push(kmer);
+                    }
+                } else {
+                    curr_kmers_to_complete.push(kmer);
+                }
+
+            }
+
+            // Add kmers not completed in this iteration
+            curr_kmers_to_complete.iter()
+                .for_each(|inc_kmer| prev_kmers_to_complete.push_back(inc_kmer.clone()));
+        }
+
+    }
+
+    kmers
 }
 
 pub fn merge_kmers(kmers_fwd : Vec<Kmer>, kmers_rev : Vec<Kmer>) -> Vec<Kmer> {
