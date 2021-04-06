@@ -156,7 +156,7 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::hashgraph::Node;
     use substring::Substring;
-    use crate::kmer::generate_kmers_linearly;
+    use crate::kmer::{generate_kmers_linearly, generate_kmers_linearly_2};
     use handlegraph::pathgraph::PathHandleGraph;
 
     /// This function creates a simple graph, used for debugging
@@ -217,7 +217,7 @@ mod test {
     fn test_kmers_graph_generation() {
         let graph = create_simple_graph();
 
-        let kmers_on_graph = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
+        let kmers_on_graph = generate_kmers_linearly_2(&graph, 3, Some(100), Some(100));
         println!("{:#?}", kmers_on_graph);
 
         assert_eq!(kmers_on_graph.len(), 12);
