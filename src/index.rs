@@ -8,7 +8,7 @@ use std::io::{Write, Read};
 use crate::utils::{get_bv_rank, find_sequence, NodeRef, find_sequence_po, find_graph_seq_length};
 use crate::dna::reverse_complement;
 use gfa::gfa::Orientation;
-use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf, merge_kmers};
+use crate::kmer::{generate_kmers, generate_kmers_hash, Kmer, KmerPos, generate_pos_on_forward, generate_hash, generate_mphf, merge_kmers, generate_kmers_linearly, generate_pos_on_ref};
 use crate::io::{print_bitvec, print_seq_to_file, print_kmers_to_file, verify_kmers, verify_kmers_2, print_kmers_to_file_split};
 use ahash::RandomState;
 use std::path::PathBuf;
@@ -95,17 +95,29 @@ impl Index {
         println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
-        let kmers_on_graph : Vec<Kmer> = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
-        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
+        let kmers_on_graph : Vec<Kmer>;
 
-        //let kmers_on_graph_rev : Vec<Kmer> = generate_kmers_rev(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
-        //println!("kmers_on_graph_rev: {:#?}", kmers_on_graph_rev);
+        if graph.paths.is_empty() { // No info on paths available
+            kmers_on_graph = generate_kmers(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        } else { // Optimize by using paths
+            kmers_on_graph = generate_kmers_linearly(graph,kmer_length as u64, Some(max_furcations), Some(max_degree));
+        }
+
+        let kmers_positions_on_ref : Vec<KmerPos> = generate_pos_on_ref(&graph, &kmers_on_graph, &total_length, &node_ref);
+
+        println!("kmers_pos:");
+        for kmer_pos in kmers_positions_on_ref {
+            println!("{:#?}", kmer_pos);
+        }
+
+        /*
+        let hash_build = RandomState::new();
+        let hashes = generate_hash(&kmers_on_graph, &hash_build);
+        let kmers_mphf = generate_mphf(&hashes);
+        println!("{:#?}", kmers_mphf);
 
         let kmers_path_split = format!("./output/{}kmers-split.fa", out_prefix);
         //print_kmers_to_file_split(&kmers_on_graph_fwd, &kmers_on_graph_rev, &PathBuf::from(kmers_path_split));
-
-        //let kmers_on_graph = merge_kmers(kmers_on_graph_fwd, kmers_on_graph_rev);
-        //println!("kmers_on_graph: {:#?}", kmers_on_graph);
 
         // Store reference in a fasta file
         let reference_path = format!("./output/{}ref.fa", out_prefix);
@@ -114,17 +126,13 @@ impl Index {
         let kmers_path = format!("./output/{}kmers.fa", out_prefix);
         print_kmers_to_file(&kmers_on_graph, &PathBuf::from(kmers_path));
 
-        /*
+
         let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
         //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
         let kmers_visualization_path = format!("./output/{}kmers_on_fwd.txt", out_prefix);
         verify_kmers_2(&forward, &kmers_on_graph, &kmers_on_seq_fwd, &PathBuf::from(kmers_visualization_path));
 
-        // TODO: seed should be fixed?
-        let hash_build = RandomState::new();
-        let hashes = generate_hash(&kmers_on_graph, &hash_build);
-        let kmer_mphf_table = generate_mphf(&hashes);
-        println!("{:#?}", kmer_mphf_table);
+
 
         // Generate kmers
         let mut sorted_handles : Vec<Handle> = graph.handles_iter().collect();
@@ -187,6 +195,53 @@ mod test {
         graph.append_step(&p2, h4);
 
         graph
+    }
+
+    /// This function creates a simple graph, used for debugging
+    ///        | 2: T \
+    /// 1:  GAT            4: CA
+    ///        \ 3: A |
+    fn create_simple_graph_2() -> HashGraph {
+        let mut graph : HashGraph = HashGraph::new();
+
+        let h1 = graph.create_handle("GAT".as_bytes(), 1);
+        let h2 = graph.create_handle("T".as_bytes(), 2);
+        let h3 = graph.create_handle("A".as_bytes(), 3);
+        let h4 = graph.create_handle("CA".as_bytes(), 4);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+
+        graph
+    }
+
+    #[test]
+    fn test_simple_graph_2() {
+        let graph = create_simple_graph_2();
+
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
+        let mut node_ref : Vec<NodeRef> = Vec::new();
+
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        let kmers_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+        let kmers_ref = generate_pos_on_ref(&graph, &kmers_graph, &total_length, &node_ref);
+
+        assert_eq!(kmers_graph.len(), kmers_ref.len());
+
+        for i in 0..kmers_graph.len() {
+            let graph_kmer = kmers_graph.get(i).unwrap();
+            let ref_kmer = kmers_ref.get(i).unwrap();
+
+            println!("{:#?}", graph_kmer);
+            println!("{:#?}", ref_kmer);
+            println!();
+
+        }
+
     }
 
     #[test]

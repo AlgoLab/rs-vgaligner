@@ -5,7 +5,7 @@ use std::cmp::min;
 use boomphf::*;
 use substring::Substring;
 use ahash::AHashMap;
-use crate::utils::NodeRef;
+use crate::utils::{NodeRef, get_bv_rank};
 use bv::BitVec;
 use std::collections::{VecDeque, HashMap};
 use std::hash::BuildHasher;
@@ -258,7 +258,7 @@ pub fn generate_kmers_linearly_forward(graph : &HashGraph, k : u64, edge_max : O
 
         let path = graph.get_path(path_id).unwrap();
 
-        println!("Path: {:#?}", path);
+        //println!("Path: {:#?}", path);
         prev_kmers_to_complete.clear();
 
         for handle in &path.nodes {
@@ -333,7 +333,7 @@ pub fn generate_kmers_linearly_reverse(graph : &HashGraph, k : u64, edge_max : O
 
         let path = graph.get_path(path_id).unwrap();
 
-        println!("Path: {:#?}", path);
+        //println!("Path: {:#?}", path);
         prev_kmers_to_complete.clear();
 
         let mut reverse_order_handles = path.nodes.clone();
@@ -563,10 +563,58 @@ pub fn generate_kmers_linearly_2(graph : &HashGraph, k : u64, edge_max : Option<
 #[derive(Debug)]
 pub struct KmerPos {
     //seq : String,
-    /// The start position of the kmer on the forward
+    /// The start position of the kmer
     pub(crate) start : u64,
-    /// The end position of the kmer on the forward
-    pub(crate) end : u64
+    /// The end position of the kmer
+    pub(crate) end : u64,
+    /// The orientation of the kmer
+    pub(crate) orient : bool
+}
+
+fn get_seq_pos(handle : &Handle, node_ref : &Vec<NodeRef>, ref_length : &u64, handle_length : &u64) -> u64 {
+    let pos : u64;
+
+    let handle_rank : u64 = handle.unpack_number() - 1;
+    let node_starting_pos : u64 = node_ref.get(handle_rank as usize).unwrap().seq_idx;
+
+    if handle.is_reverse() {
+        pos = ref_length - node_starting_pos - handle_length;
+    } else {
+        pos = node_starting_pos;
+    }
+
+    pos
+}
+
+// TODO: remove first parameter
+pub fn generate_pos_on_ref(graph : &HashGraph, kmers_on_graph : &Vec<Kmer>, seq_length : &u64,
+                           node_ref : &Vec<NodeRef>) -> Vec<KmerPos>{
+    let mut kmers_on_ref : Vec<KmerPos> = Vec::new();
+
+    for kmer in kmers_on_graph {
+
+        let first_handle_of_kmer = kmer.handles.first().unwrap();
+        let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
+        let first_handle_length = first_handle_node.sequence.len();
+
+        let last_handle_of_kmer = kmer.handles.last().unwrap();
+        let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
+        let last_handle_length = last_handle_node.sequence.len();
+
+        let start_ref = get_seq_pos(first_handle_of_kmer, node_ref, seq_length, &(first_handle_length as u64)) + kmer.begin;
+        let end_ref = get_seq_pos(last_handle_of_kmer, node_ref, seq_length, &(last_handle_length as u64)) + kmer.end;
+
+
+        let mut pos = KmerPos {
+            start : start_ref,
+            end : end_ref,
+            orient: kmer.handle_orient
+        };
+        kmers_on_ref.push(pos);
+
+    }
+
+    kmers_on_ref
 }
 
 /// This function converts kmer positions on the graph to kmer positions on the forward
@@ -578,7 +626,6 @@ pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
     for kmer in kmers_on_graph {
 
         // -1 required because i-eth node id is i-1-eth in node list
-        // see TODO in kmer
 
         let kmer_handle = kmer.handles.get(0).unwrap();
         let kmer_nodeId = kmer_handle.unpack_number()-1;
@@ -590,7 +637,8 @@ pub fn generate_pos_on_forward(kmers_on_graph : &Vec<Kmer>, forward : &String,
         let curr_kmer : KmerPos = KmerPos {
             //seq : kmer.seq.clone(),
             start : start_pos_on_fwd,
-            end : end_pos_on_fwd
+            end : end_pos_on_fwd,
+            orient : true,
         };
         kmers_on_fwd.push(curr_kmer);
     }
