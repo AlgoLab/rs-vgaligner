@@ -88,11 +88,11 @@ impl Index {
         let forward = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
         let reverse = reverse_complement(&forward.as_str());
 
-        println!("Forward is: {}", forward);
+        //println!("Forward is: {}", forward);
         //println!("Reverse is: {}", reverse);
-        print!("Bitvec is: ",);
-        print_bitvec(&seq_bv);
-        println!("\n");
+        //print!("Bitvec is: ",);
+        //print_bitvec(&seq_bv);
+        //println!("\n");
         //println!("NodeRef is: {:#?}", node_ref);
 
         let kmers_on_graph : Vec<Kmer>;
@@ -105,34 +105,26 @@ impl Index {
 
         let kmers_positions_on_ref : Vec<KmerPos> = generate_pos_on_ref(&graph, &kmers_on_graph, &total_length, &node_ref);
 
-        println!("kmers_pos:");
-        for kmer_pos in kmers_positions_on_ref {
-            println!("{:#?}", kmer_pos);
-        }
+        //println!("kmers_pos:");
+        //for kmer_pos in kmers_positions_on_ref {
+        //    println!("{:#?}", kmer_pos);
+        //}
 
-        /*
         let hash_build = RandomState::new();
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
         let kmers_mphf = generate_mphf(&hashes);
         println!("{:#?}", kmers_mphf);
 
+
+        /*
         let kmers_path_split = format!("./output/{}kmers-split.fa", out_prefix);
         //print_kmers_to_file_split(&kmers_on_graph_fwd, &kmers_on_graph_rev, &PathBuf::from(kmers_path_split));
-
         // Store reference in a fasta file
         let reference_path = format!("./output/{}ref.fa", out_prefix);
         print_seq_to_file(&forward, &PathBuf::from(reference_path));
         // Store kmers in a fasta file
         let kmers_path = format!("./output/{}kmers.fa", out_prefix);
         print_kmers_to_file(&kmers_on_graph, &PathBuf::from(kmers_path));
-
-
-        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
-        //println!("kmers_on_seq_fwd: {:#?}", kmers_on_seq_fwd);
-        let kmers_visualization_path = format!("./output/{}kmers_on_fwd.txt", out_prefix);
-        verify_kmers_2(&forward, &kmers_on_graph, &kmers_on_seq_fwd, &PathBuf::from(kmers_visualization_path));
-
-
 
         // Generate kmers
         let mut sorted_handles : Vec<Handle> = graph.handles_iter().collect();
@@ -153,6 +145,7 @@ impl Index {
             println!("Backward handle {:#?} has nodeId {} with seq {}\n", handle, handle.unpack_number(), test2);
         }
          */
+
 
         index
     }
@@ -203,7 +196,6 @@ mod test {
     ///        \ 3: A |
     fn create_simple_graph_2() -> HashGraph {
         let mut graph : HashGraph = HashGraph::new();
-
         let h1 = graph.create_handle("GAT".as_bytes(), 1);
         let h2 = graph.create_handle("T".as_bytes(), 2);
         let h3 = graph.create_handle("A".as_bytes(), 3);
@@ -239,9 +231,28 @@ mod test {
             println!("{:#?}", graph_kmer);
             println!("{:#?}", ref_kmer);
             println!();
-
         }
 
+    }
+
+    #[test]
+    fn test_assert_both_functions_find_same_kmers() {
+        let graph = create_simple_graph();
+
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
+        let mut node_ref : Vec<NodeRef> = Vec::new();
+
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        let kmers_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
+        let kmers_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
+
+        assert_eq!(kmers_graph_dozyg.len(), kmers_graph_rust_ver.len());
+
+        for kmer in &kmers_graph_rust_ver {
+            assert!(kmers_graph_dozyg.contains(kmer));
+        }
     }
 
     #[test]
@@ -272,8 +283,7 @@ mod test {
     fn test_kmers_graph_generation() {
         let graph = create_simple_graph();
 
-        let kmers_on_graph = generate_kmers_linearly_2(&graph, 3, Some(100), Some(100));
-        println!("{:#?}", kmers_on_graph);
+        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
         assert_eq!(kmers_on_graph.len(), 12);
 
@@ -284,36 +294,6 @@ mod test {
         let kmers_on_graph_100 = generate_kmers(&graph, 100, Some(100), Some(100));
         assert_eq!(kmers_on_graph_100.len(), 0);
         // ...it doesn't!
-    }
-
-    #[test]
-    fn test_kmers_fwd_generation() {
-        let graph = create_simple_graph();
-
-        let total_length = find_graph_seq_length(&graph);
-        let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
-        let mut node_ref : Vec<NodeRef> = Vec::new();
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
-
-        let kmers_on_graph: Vec<Kmer> = generate_kmers(&graph, 3, Some(100), Some(100));
-
-        // Note: forward generation and kmers_on_graph generation are independent from each other...
-        // maybe they could be parallelized?
-
-        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
-        assert_eq!(kmers_on_graph.len(), kmers_on_graph.len());
-
-        // There is a 1-1 relationship between kmers_on_graph and kmers_on_seq_fwd, i.e.
-        // the i-eth position in each refers to the same kmer
-
-        for i in 0..kmers_on_graph.len() {  // kmers_on_seq_fwd.len() would work as well
-            let graph_kmer : &Kmer = kmers_on_graph.get(i).unwrap();
-            let fwd_kmer : &KmerPos = kmers_on_seq_fwd.get(i).unwrap();
-
-            // Check if the kmer retrieved from the graph (graph_kmer) is equal to
-            // the substring of the forward starting and ending in the positions from fwd_kmer
-            assert_eq!(graph_kmer.seq, forward.substring(fwd_kmer.start as usize, fwd_kmer.end as usize))
-        }
     }
 
     #[test]
@@ -328,6 +308,12 @@ mod test {
         graph.create_edge(&Edge(h1, h2));
         graph.create_edge(&Edge(h2, h3));
 
+        let p1 = graph.create_path_handle("P1".as_bytes(),false);
+        graph.append_step(&p1, h1);
+        graph.append_step(&p1, h2);
+        graph.append_step(&p1, h3);
+
+
         // Generate the forward
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
@@ -339,10 +325,16 @@ mod test {
         assert_eq!(*node_ref.get(1).unwrap(),  NodeRef { seq_idx: 3, edge_idx: 1, edges_to_node: 1 });
         assert_eq!(*node_ref.get(2).unwrap(),  NodeRef { seq_idx: 6, edge_idx: 2, edges_to_node: 1 });
 
-        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
-        assert_eq!(kmers_on_graph.len(), 6);
+        let kmers_on_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
+        let kmers_on_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
 
-        let kmers_on_seq_fwd : Vec<KmerPos> = generate_pos_on_forward(&kmers_on_graph, &forward, &seq_bv, &node_ref);
+        assert_eq!(kmers_on_graph_rust_ver.len(), 10);
+        assert_eq!(kmers_on_graph_dozyg.len(), 10);
+
+        for kmer in &kmers_on_graph_rust_ver {
+            assert!(kmers_on_graph_dozyg.contains(kmer));
+        }
+
     }
 
     #[test]
@@ -360,6 +352,11 @@ mod test {
         graph.create_edge(&Edge(h2, h2));
         graph.create_edge(&Edge(h2, h3));
 
+        let p1 = graph.create_path_handle("P1".as_bytes(),false);
+        graph.append_step(&p1, h1);
+        graph.append_step(&p1, h2);
+        graph.append_step(&p1, h3);
+
         // Generate the forward
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv : BitVec = BitVec::new_fill(false,total_length+1);
@@ -373,8 +370,15 @@ mod test {
         // representing the loop
         assert_eq!(*node_ref.get(2).unwrap(),  NodeRef { seq_idx: 6, edge_idx: 3, edges_to_node: 1 });
 
-        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
-        assert_eq!(kmers_on_graph.len(), 6);
+        let kmers_on_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
+        let kmers_on_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
+
+        assert_eq!(kmers_on_graph_rust_ver.len(), 10);
+        assert_eq!(kmers_on_graph_dozyg.len(), 10);
+
+        for kmer in &kmers_on_graph_rust_ver {
+            assert!(kmers_on_graph_dozyg.contains(kmer));
+        }
 
     }
 }

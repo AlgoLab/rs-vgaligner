@@ -43,7 +43,8 @@ impl Kmer {
     /// kmer is on more than one handle
     fn extend_kmer(&mut self, new_seq : String, new_handle : Handle) {
         self.seq.push_str(&new_seq);
-        self.end += new_seq.len() as u64;
+        //self.end += new_seq.len() as u64;
+        self.end = new_seq.len() as u64;
         self.handles.push(new_handle);
     }
 
