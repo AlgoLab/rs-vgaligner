@@ -2,21 +2,21 @@
 
 /// This function returns the reverse-complement of a sequence
 /// given as input.
-pub fn reverse_complement(sequence : &str) -> String {
+pub fn reverse_complement(sequence: &str) -> String {
     let mut rc_seq = String::with_capacity(sequence.len());
 
     // Iterate over the bases of the sequence in reverse
     for base in sequence.chars().rev() {
         match is_dna(base) {
             false => panic!("Input sequence base is not DNA: {}", base),
-            true => rc_seq.push(switch_base(base))
+            true => rc_seq.push(switch_base(base)),
         }
     }
 
     rc_seq
 }
 
-fn switch_base(c:char) -> char {
+fn switch_base(c: char) -> char {
     match c {
         'a' => 't',
         'c' => 'g',
@@ -28,14 +28,14 @@ fn switch_base(c:char) -> char {
         'T' => 'A',
         'G' => 'C',
         'U' => 'A',
-        _ => 'N'
+        _ => 'N',
     }
 }
 
 fn is_dna(base: char) -> bool {
     match base {
-        'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U'| 'u'  => true,
-        _ => false
+        'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U' | 'u' => true,
+        _ => false,
     }
 }
 

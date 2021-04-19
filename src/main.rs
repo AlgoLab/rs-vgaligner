@@ -1,19 +1,17 @@
-use std::path::PathBuf;
-use gfa::{parser::GFAParser, gfa::GFA};
-use handlegraph::handlegraph::HandleGraph;
-use handlegraph::hashgraph::HashGraph;
 use clap::{App, Arg};
+use gfa::{gfa::GFA, parser::GFAParser};
+use handlegraph::hashgraph::HashGraph;
+use std::path::PathBuf;
 
-pub mod index;
-pub mod utils;
 pub mod dna;
-pub mod kmer;
+pub mod index;
 pub mod io;
+pub mod kmer;
+pub mod utils;
 
 use crate::index::Index;
 
 fn main() {
-
     let matches = App::new("rs-vgalign")
         .version("0.1")
         .author("Francesco Porto <francesco.porto97@gmail.com>")
@@ -74,13 +72,9 @@ fn main() {
         )
         .get_matches();
 
-    let in_path_file = matches
-        .value_of("input")
-        .unwrap();
+    let in_path_file = matches.value_of("input").unwrap();
 
-    let out_prefix = matches
-        .value_of("out-prefix")
-        .unwrap_or_else(|| &"");
+    let out_prefix = matches.value_of("out-prefix").unwrap_or_else(|| &"");
 
     let kmer_length = matches
         .value_of("kmer-length")
@@ -108,10 +102,16 @@ fn main() {
 
     // Create HashGraph from GFA
     let parser = GFAParser::new();
-    let gfa : GFA<usize, ()> = parser.parse_file(&PathBuf::from(in_path_file)).unwrap();
+    let gfa: GFA<usize, ()> = parser.parse_file(&PathBuf::from(in_path_file)).unwrap();
     let graph = HashGraph::from_gfa(&gfa);
 
     // STEP 1: Build the index for the input graph
-    let graph_index = Index::build(&graph, kmer_length, max_furcations, max_degree, sampling_rate, out_prefix);
-
+    let graph_index = Index::build(
+        &graph,
+        kmer_length,
+        max_furcations,
+        max_degree,
+        sampling_rate,
+        out_prefix,
+    );
 }
