@@ -582,7 +582,7 @@ pub fn generate_kmers_linearly_2(
 }
 
 /// Struct that represents the kmer positions on the forward
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct KmerPos {
     //seq : String,
     /// The start position of the kmer
@@ -713,8 +713,10 @@ pub fn generate_hash(kmers_on_graph: &Vec<Kmer>, hash_builder: &RandomState) -> 
     let mut hashes: Vec<u64> = Vec::new();
 
     kmers_on_graph.iter().for_each(|kmer| {
-        hashes.push(u32::get_hash(&kmer.seq, hash_builder));
+        hashes.push(u64::get_hash(&kmer.seq, hash_builder));
     });
+
+    hashes.sort();
 
     hashes
 }

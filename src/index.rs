@@ -9,6 +9,7 @@ use boomphf::hashmap::BoomHashMap;
 use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::hashgraph::HashGraph;
+use boomphf::Mphf;
 
 #[derive(Default)]
 pub struct Index {
@@ -43,7 +44,7 @@ pub struct Index {
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
     //kmer_pos_ref: Vec<u64>,
     // our kmer positions
-    //kmer_pos_table: Vec<u64>, //TODO: check this
+    kmer_pos_table: Vec<KmerPos>,
     // if we're loaded, helps during teardown
     loaded: bool,
 }
@@ -100,12 +101,12 @@ impl Index {
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
         // First obtain the kmers' hashes
-        let hash_build = RandomState::new();
+        let hash_build = RandomState::with_seeds(0,0,0,0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
         println!("{:#?}", hashes);
 
         // Then generate the table
-        let kmers_mphf = BoomHashMap::new(hashes, kmers_positions_on_ref);
+        let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
         println!("{:#?}", kmers_mphf);
 
         Index {
@@ -123,7 +124,7 @@ impl Index {
             n_kmers: kmers_mphf.len() as u64,
             n_kmer_pos: 0,
             //kmer_pos_ref: vec![],
-            //kmer_pos_table: vec![],
+            kmer_pos_table: kmers_positions_on_ref,
             loaded: true
         }
     }
@@ -416,5 +417,38 @@ mod test {
         for kmer in &kmers_on_graph_rust_ver {
             assert!(kmers_on_graph_dozyg.contains(kmer));
         }
+    }
+
+    #[test]
+    fn test_table() {
+        let mut graph = create_simple_graph();
+
+        let seq_length = find_graph_seq_length(&graph);
+
+        // Generate the forward
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
+        let mut node_ref: Vec<NodeRef> = Vec::new();
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+
+        let kmers_positions_on_ref: Vec<KmerPos> =
+            generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
+
+        let hash_build = RandomState::with_seeds(0,0,0,0);
+        let hashes = generate_hash(&kmers_on_graph, &hash_build);
+        let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
+
+        for i in 0..kmers_on_graph.len() {
+            let kmer = kmers_on_graph.get(i).unwrap();
+            let kmer_pos_on_ref = kmers_positions_on_ref.get(i).unwrap();
+            let hash = hashes.get(i).unwrap();
+
+            let table_value = kmers_mphf.get(hash).unwrap();
+            assert_eq!(kmer_pos_on_ref, table_value);
+
+        }
+
     }
 }
