@@ -116,6 +116,12 @@ impl Index {
             );
         }
 
+        // Store graph kmers to file
+        let kmer_graph_filename : String = out_prefix.to_owned() + ".kgph";
+        let encoded_kmer_graph = bincode::serialize(&kmers_on_graph).unwrap();
+        store_object_to_file(&encoded_kmer_graph, &kmer_graph_filename);
+
+
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 

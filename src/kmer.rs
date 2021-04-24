@@ -13,9 +13,10 @@ use std::cmp::min;
 use std::collections::VecDeque;
 use substring::Substring;
 use serde::{Serialize, Deserialize};
+use crate::serialization::{SerializableHandle, SerialHandle};
 
 /// Struct that represents a kmer in the graph
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Kmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
@@ -23,8 +24,12 @@ pub struct Kmer {
     begin: u64,
     /// The end position relative to the handle
     end: u64,
-    /// The handles where the kmer is
-    pub(crate) handles: Vec<Handle>,
+    /// The first handle of the kmer
+    #[serde(with = "SerialHandle")]
+    pub(crate) first: Handle,
+    /// The last handle of the kmer
+    #[serde(with = "SerialHandle")]
+    pub(crate) last: Handle,
     /// The orientation of the handles
     handle_orient: bool,
     /// The number of forks the kmer has been involved in
@@ -44,69 +49,13 @@ impl Kmer {
         self.seq.push_str(&new_seq);
         //self.end += new_seq.len() as u64;
         self.end = new_seq.len() as u64;
-        self.handles.push(new_handle);
+        self.last = new_handle;
     }
 
     fn add_handle_to_complete(&mut self, new_handle: Handle) {
-        self.handles.push(new_handle);
+        self.last = new_handle;
     }
 }
-
-/*pub fn generate_kmers_2(graph : &HashGraph, k : u64, edge_max : Option<u64>, degree_max : Option<u64>) -> Vec<Kmer> {
-    let mut kmers : Vec<Kmer> = Vec::new();
-    let mut curr_kmers_to_complete : Vec<Kmer> = Vec::new();
-
-    let mut q: VecDeque<NodeId> = VecDeque::new();
-    let mut visited_nodes : Vec<NodeId> = Vec::new();
-
-    q.push_back(graph.min_id);
-    while let Some(curr_node_id) = q.pop_front() {
-
-        let current_handle = Handle::pack(curr_node_id, false);
-
-        // First try extending the open kmers with the current node
-
-
-        // Get current handle
-        let node = graph.get_node(&curr_node_id).unwrap();
-        let handle_seq = node.sequence.to_string();
-        let handle_length = handle_seq.len() as u64;
-
-        // Then try generating the kmers from the given node
-        for i in 0..handle_length {
-            let begin = i;
-            let end = min(i+k, handle_length);
-            let mut kmer = Kmer {
-                seq : handle_seq.substring(begin as usize, end as usize).to_string(),
-                begin,
-                end,
-                handle
-            };
-
-            if (kmer.seq.len() as u64) == k {
-                if !kmers.contains(&kmer) {
-                    kmers.push(kmer);
-                }
-            } else {
-                curr_kmers_to_complete.push(kmer);
-            }
-        }
-
-
-        for neighbor in graph.handle_edges_iter(current_handle, Direction::Right) {
-            if !visited_nodes.contains(*neighbor.id()) {
-                // Add neighbor id to queue
-                q.push_back(neighbor.id());
-            }
-        }
-
-        // Add to visited nodes
-        visited_nodes.push(curr_node);
-    }
-
-
-    kmers
-}*/
 
 pub fn generate_kmers(
     graph: &HashGraph,
@@ -164,7 +113,8 @@ pub fn generate_kmers(
                         .to_string(),
                     begin,
                     end,
-                    handles: vec![handle],
+                    first: handle,
+                    last: handle,
                     handle_orient: orient,
                     forks: 0,
                 };
@@ -203,7 +153,7 @@ pub fn generate_kmers(
 
             // Then complete all incomplete kmers
             while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
-                handle = incomplete_kmer.handles.pop().unwrap();
+                handle = incomplete_kmer.last;
                 handle_seq = graph.sequence(handle).into_string_lossy();
                 handle_length = handle_seq.len() as u64;
 
@@ -304,7 +254,8 @@ pub fn generate_kmers_linearly_forward(
                         .to_string(),
                     begin,
                     end,
-                    handles: vec![*handle],
+                    first: *handle,
+                    last: *handle,
                     handle_orient: true,
                     forks: 0,
                 };
@@ -385,7 +336,8 @@ pub fn generate_kmers_linearly_reverse(
                         .to_string(),
                     begin,
                     end,
-                    handles: vec![handle],
+                    first: handle,
+                    last: handle,
                     handle_orient: false,
                     forks: 0,
                 };
@@ -493,7 +445,8 @@ pub fn generate_kmers_linearly_2(
                             .to_string(),
                         begin,
                         end,
-                        handles: vec![handle],
+                        first: handle,
+                        last: handle,
                         handle_orient: orient,
                         forks: 0,
                     };
@@ -532,7 +485,7 @@ pub fn generate_kmers_linearly_2(
 
                 // Then complete all incomplete kmers
                 while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
-                    handle = incomplete_kmer.handles.pop().unwrap();
+                    handle = incomplete_kmer.last;
                     handle_seq = graph.sequence(handle).into_string_lossy();
                     handle_length = handle_seq.len() as u64;
 
@@ -624,22 +577,22 @@ pub fn generate_pos_on_ref(
     let mut kmers_on_ref: Vec<KmerPos> = Vec::new();
 
     for kmer in kmers_on_graph {
-        let first_handle_of_kmer = kmer.handles.first().unwrap();
+        let first_handle_of_kmer = kmer.first;
         let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
         let first_handle_length = first_handle_node.sequence.len();
 
-        let last_handle_of_kmer = kmer.handles.last().unwrap();
+        let last_handle_of_kmer = kmer.last;
         let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
         let last_handle_length = last_handle_node.sequence.len();
 
         let start_ref = get_seq_pos(
-            first_handle_of_kmer,
+            &first_handle_of_kmer,
             node_ref,
             seq_length,
             &(first_handle_length as u64),
         ) + kmer.begin;
         let end_ref = get_seq_pos(
-            last_handle_of_kmer,
+            &last_handle_of_kmer,
             node_ref,
             seq_length,
             &(last_handle_length as u64),
@@ -669,7 +622,7 @@ pub fn generate_pos_on_forward(
     for kmer in kmers_on_graph {
         // -1 required because i-eth node id is i-1-eth in node list
 
-        let kmer_handle = kmer.handles.get(0).unwrap();
+        let kmer_handle = kmer.first;
         let kmer_nodeId = kmer_handle.unpack_number() - 1;
 
         let noderef_kmer: &NodeRef = node_ref.get(kmer_nodeId as usize).unwrap();

@@ -16,7 +16,7 @@ pub fn print_kmers(kmers_on_graph: &Vec<Kmer>, kmers_on_seq_fwd: &Vec<KmerPos>) 
             graph_kmer.seq,
             fwd_kmer.start,
             fwd_kmer.end,
-            graph_kmer.handles.get(0).unwrap()
+            graph_kmer.first
         );
     }
 }
