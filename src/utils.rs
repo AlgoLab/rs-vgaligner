@@ -4,8 +4,9 @@ use handlegraph::handle::{Direction, Edge, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use std::collections::VecDeque;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeRef {
     pub(crate) seq_idx: u64,       // Represents the starting position on the fwd
     pub(crate) edge_idx: u64,      // Represents the starting position on the edge vector

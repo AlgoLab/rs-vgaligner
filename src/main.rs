@@ -8,6 +8,7 @@ pub mod index;
 pub mod io;
 pub mod kmer;
 pub mod utils;
+mod serialization;
 
 use crate::index::Index;
 

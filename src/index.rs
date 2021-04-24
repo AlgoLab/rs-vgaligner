@@ -10,6 +10,8 @@ use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::hashgraph::HashGraph;
 use boomphf::Mphf;
+use crate::io::store_object_to_file;
+use serde_with::serde_as;
 
 #[derive(Default)]
 pub struct Index {
@@ -71,11 +73,28 @@ impl Index {
 
         // Mark node starts in forward
         let mut seq_bv: BitVec = BitVec::new_fill(false, seq_length + 1);
+
         // Store offsets in fwd and edge vector
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
         let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
+
+        // Store forward and reverse to file
+        let seq_fwd_filename : String = out_prefix.to_owned() + ".sqf";
+        store_object_to_file(seq_fwd.as_bytes(), &seq_fwd_filename);
+        let seq_rev_filename : String = out_prefix.to_owned() + ".sqr";
+        store_object_to_file(seq_rev.as_bytes(), &seq_rev_filename);
+
+        // Store noderef to file
+        let node_ref_filename : String = out_prefix.to_owned() + ".gyn";
+        let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
+        store_object_to_file(&encoded_node_ref, &node_ref_filename);
+
+        // Store seq_bv to file
+        let bitvec_filename : String = out_prefix.to_owned() + ".sbv";
+        let encoded_bit_vec = bincode::serialize(&seq_bv).unwrap();
+        store_object_to_file(&encoded_bit_vec, &bitvec_filename);
 
         let kmers_on_graph: Vec<Kmer>;
 
@@ -100,6 +119,11 @@ impl Index {
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
+        // Store kmers_positions_on_ref to file
+        let kmer_pos_filename : String = out_prefix.to_owned() + ".kpos";
+        let encoded_kmer_pos = bincode::serialize(&kmers_positions_on_ref).unwrap();
+        store_object_to_file(&encoded_kmer_pos, &kmer_pos_filename);
+
         // First obtain the kmers' hashes
         let hash_build = RandomState::with_seeds(0,0,0,0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
@@ -108,6 +132,11 @@ impl Index {
         // Then generate the table
         let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
         println!("{:#?}", kmers_mphf);
+
+        // Store table to file
+        //let table_filename : String = out_prefix.to_owned() + ".bbx";
+        //let encoded_table = bincode::serialize(&kmers_mphf).unwrap();
+        //store_object_to_file(&encoded_table, &table_filename);
 
         Index {
             kmer_length,

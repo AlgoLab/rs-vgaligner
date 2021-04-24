@@ -12,6 +12,7 @@ use handlegraph::pathgraph::PathHandleGraph;
 use std::cmp::min;
 use std::collections::VecDeque;
 use substring::Substring;
+use serde::{Serialize, Deserialize};
 
 /// Struct that represents a kmer in the graph
 #[derive(Debug, Clone)]
@@ -582,7 +583,7 @@ pub fn generate_kmers_linearly_2(
 }
 
 /// Struct that represents the kmer positions on the forward
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct KmerPos {
     //seq : String,
     /// The start position of the kmer
