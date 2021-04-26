@@ -15,7 +15,7 @@ bv = "0.11.1"
 rayon = "1.5.0"
 
 # Minimal Perfect Hash Funnction, it's bbhash with another name
-boomphf = "0.5.9"
+boomphf = {version = "0.5.9", features = ["serde"]}
 
 substring = "1.4.5"
 ahash = "0.7.2"

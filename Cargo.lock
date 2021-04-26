@@ -164,6 +164,7 @@ dependencies = [
  "crossbeam-utils",
  "log",
  "rayon",
+ "serde",
  "wyhash",
 ]
 
