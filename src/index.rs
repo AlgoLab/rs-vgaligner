@@ -9,9 +9,10 @@ use boomphf::hashmap::BoomHashMap;
 use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::hashgraph::HashGraph;
-use boomphf::Mphf;
 use crate::io::store_object_to_file;
 use serde_with::serde_as;
+use boomphf::hashmap::NoKeyBoomHashMap;
+//use crate::serialization::KmerTable;
 
 #[derive(Default)]
 pub struct Index {
@@ -136,13 +137,20 @@ impl Index {
         println!("{:#?}", hashes);
 
         // Then generate the table
-        let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
-        println!("{:#?}", kmers_mphf);
+        //let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
+        let table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+        //let kmers_mphf = NoKeyBoomHashMap::new_parallel(hashes.clone(), (0..hashes.len()).collect());
+        //println!("{:#?}", kmers_mphf);
 
-        // Store table to file
-        //let table_filename : String = out_prefix.to_owned() + ".bbx";
-        //let encoded_table = bincode::serialize(&kmers_mphf).unwrap();
-        //store_object_to_file(&encoded_table, &table_filename);
+        //let table = KmerTable {
+        //    table: NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone()),
+        //    size: hashes.len() as u64,
+        //};
+
+        // Store the table to file
+        let table_filename : String = out_prefix.to_owned() + ".bbx";
+        let encoded_table = bincode::serialize(&table).unwrap();
+        store_object_to_file(&encoded_table, &table_filename);
 
         Index {
             kmer_length,
@@ -156,7 +164,7 @@ impl Index {
             edges: vec![],
             n_nodes: 0,
             node_ref,
-            n_kmers: kmers_mphf.len() as u64,
+            n_kmers: kmers_positions_on_ref.len() as u64,
             n_kmer_pos: 0,
             //kmer_pos_ref: vec![],
             kmer_pos_table: kmers_positions_on_ref,

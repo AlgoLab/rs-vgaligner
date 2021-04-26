@@ -13,7 +13,7 @@ use std::cmp::min;
 use std::collections::VecDeque;
 use substring::Substring;
 use serde::{Serialize, Deserialize};
-use crate::serialization::{SerializableHandle, SerialHandle};
+use crate::serialization::{SerializableHandle};
 
 /// Struct that represents a kmer in the graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,10 +25,10 @@ pub struct Kmer {
     /// The end position relative to the handle
     end: u64,
     /// The first handle of the kmer
-    #[serde(with = "SerialHandle")]
+    #[serde(with = "SerializableHandle")]
     pub(crate) first: Handle,
     /// The last handle of the kmer
-    #[serde(with = "SerialHandle")]
+    #[serde(with = "SerializableHandle")]
     pub(crate) last: Handle,
     /// The orientation of the handles
     handle_orient: bool,

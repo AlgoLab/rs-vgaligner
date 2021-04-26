@@ -3,64 +3,37 @@ use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use std::ops::{Deref, DerefMut};
 use serde::de::{self, Visitor};
 use std::fmt;
-
-/// Create a wrapper for Handle so that it can be serialized
-#[derive(Debug, Clone)]
-pub(crate) struct SerializableHandle(Handle);
+use std::collections::HashMap;
+use boomphf::hashmap::NoKeyBoomHashMap;
+use boomphf::Mphf;
+use crate::kmer::KmerPos;
+use std::marker::PhantomData;
+use bitvector::*;
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Handle")]
-pub(crate) struct SerialHandle(u64);
+pub(crate) struct SerializableHandle(u64);
 
-/// Serialization trait
-impl Serialize for SerializableHandle {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-    {
-        serializer.serialize_u64(self.0.0)
-    }
+/*
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Mphf")]
+pub(crate) struct SerializableMphf<T> {
+    pub bitvecs: Vec<BitVector>,
+    pub ranks: Vec<Vec<u64>>,
+    pub phantom: PhantomData<T>,
 }
 
-/// Deserialization trait
-struct SerializableHandleVisitor;
-
-impl<'de> Visitor<'de> for SerializableHandleVisitor {
-    type Value = SerializableHandle;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("A Handle")
-    }
-
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-    {
-        Ok(SerializableHandle(Handle::from_integer(value)))
-    }
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "NoKeyBoomHashMap")]
+pub(crate) struct SerializableNoKeyBoomHashMap<K,D1> {
+    pub mphf: SerializableMphf<K>,
+    pub values: Vec<D1>,
 }
 
-impl<'de> Deserialize<'de> for SerializableHandle {
-    fn deserialize<D>(deserializer: D) -> Result<SerializableHandle, D::Error>
-        where
-            D: Deserializer<'de>,
-    {
-        deserializer.deserialize_u64(SerializableHandleVisitor)
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct KmerTable {
+    #[serde(with = "SerializableNoKeyBoomHashMap")]
+    pub table: NoKeyBoomHashMap<u64, KmerPos>,
+    pub size: u64
 }
-
-
-// Implement both Deref and DerefMut for transparent usage
-impl Deref for SerializableHandle {
-    type Target = Handle;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SerializableHandle {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+ */
