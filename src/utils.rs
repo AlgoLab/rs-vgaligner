@@ -1,10 +1,11 @@
+use std::collections::VecDeque;
+
 use bv::*;
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Edge, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use std::collections::VecDeque;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeRef {

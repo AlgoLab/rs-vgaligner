@@ -7,8 +7,8 @@ pub mod dna;
 pub mod index;
 pub mod io;
 pub mod kmer;
-pub mod utils;
 mod serialization;
+pub mod utils;
 
 use crate::index::Index;
 
@@ -113,6 +113,6 @@ fn main() {
         max_furcations,
         max_degree,
         sampling_rate,
-        out_prefix,
+        out_prefix.to_string(),
     );
 }

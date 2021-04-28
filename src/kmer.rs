@@ -1,4 +1,6 @@
-use crate::utils::NodeRef;
+use std::cmp::min;
+use std::collections::VecDeque;
+
 use ahash::AHashMap;
 use ahash::CallHasher;
 use ahash::RandomState;
@@ -9,11 +11,11 @@ use handlegraph::handle::{Direction, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::pathgraph::PathHandleGraph;
-use std::cmp::min;
-use std::collections::VecDeque;
+use serde::{Deserialize, Serialize};
 use substring::Substring;
-use serde::{Serialize, Deserialize};
-use crate::serialization::{SerializableHandle};
+
+use crate::serialization::SerializableHandle;
+use crate::utils::NodeRef;
 
 /// Struct that represents a kmer in the graph
 #[derive(Debug, Clone, Serialize, Deserialize)]

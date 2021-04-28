@@ -1,9 +1,11 @@
-use crate::kmer::{Kmer, KmerPos};
-use bv::BitVec;
 use std::fs::File;
+use std::io::prelude::*;
 use std::io::Write;
 use std::path::PathBuf;
-use std::io::prelude::*;
+
+use bv::BitVec;
+
+use crate::kmer::{Kmer, KmerPos};
 
 /// This function prints kmers data
 pub fn print_kmers(kmers_on_graph: &Vec<Kmer>, kmers_on_seq_fwd: &Vec<KmerPos>) {
@@ -13,10 +15,7 @@ pub fn print_kmers(kmers_on_graph: &Vec<Kmer>, kmers_on_seq_fwd: &Vec<KmerPos>) 
 
         println!(
             "Seq: {},\nStart_fwd: {},\nEnd_fwd: {},\nHandles: {:#?}\n",
-            graph_kmer.seq,
-            fwd_kmer.start,
-            fwd_kmer.end,
-            graph_kmer.first
+            graph_kmer.seq, fwd_kmer.start, fwd_kmer.end, graph_kmer.first
         );
     }
 }
@@ -126,7 +125,7 @@ pub fn verify_kmers_2(seq: &str, kmers: &Vec<Kmer>, kmer_pos: &Vec<KmerPos>, pat
     }
 }
 
-pub fn store_object_to_file(serialized_object: &[u8], fileName : &String) -> std::io::Result<()> {
+pub fn store_object_to_file(serialized_object: &[u8], fileName: &String) -> std::io::Result<()> {
     let mut file = File::create(fileName)?;
     file.write_all(serialized_object)?;
     Ok(())

@@ -1,18 +1,18 @@
-use crate::dna::reverse_complement;
-use crate::kmer::{
-    generate_hash, generate_kmers, generate_kmers_linearly,
-    generate_pos_on_ref, Kmer, KmerPos,
-};
-use crate::utils::{find_graph_seq_length, find_sequence_po, NodeRef};
 use ahash::RandomState;
 use boomphf::hashmap::BoomHashMap;
+use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::hashgraph::HashGraph;
-use crate::io::store_object_to_file;
 use serde_with::serde_as;
-use boomphf::hashmap::NoKeyBoomHashMap;
-//use crate::serialization::KmerTable;
+
+use crate::dna::reverse_complement;
+use crate::io::store_object_to_file;
+use crate::kmer::{
+    generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
+};
+use crate::serialization::serialize_object_to_file;
+use crate::utils::{find_graph_seq_length, find_sequence_po, NodeRef};
 
 #[derive(Default)]
 pub struct Index {
@@ -64,7 +64,7 @@ impl Index {
         max_furcations: u64,
         max_degree: u64,
         sampling_rate: f32,
-        out_prefix: &str,
+        out_prefix: String,
     ) -> Self {
         // Get the number of nodes in the graph
         let number_nodes = graph.graph.len();
@@ -81,69 +81,40 @@ impl Index {
         let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
 
-        // Store forward and reverse to file
-        let seq_fwd_filename : String = out_prefix.to_owned() + ".sqf";
-        store_object_to_file(seq_fwd.as_bytes(), &seq_fwd_filename);
-        let seq_rev_filename : String = out_prefix.to_owned() + ".sqr";
-        store_object_to_file(seq_rev.as_bytes(), &seq_rev_filename);
+        serialize_object_to_file(&seq_fwd, out_prefix.clone() + ".sqf");
+        serialize_object_to_file(&seq_rev, out_prefix.clone() + ".sqr");
+        serialize_object_to_file(&node_ref, out_prefix.clone() + ".gyn");
+        serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv");
 
-        // Store noderef to file
-        let node_ref_filename : String = out_prefix.to_owned() + ".gyn";
-        let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
-        store_object_to_file(&encoded_node_ref, &node_ref_filename);
-
-        // Store seq_bv to file
-        let bitvec_filename : String = out_prefix.to_owned() + ".sbv";
-        let encoded_bit_vec = bincode::serialize(&seq_bv).unwrap();
-        store_object_to_file(&encoded_bit_vec, &bitvec_filename);
-
-        let kmers_on_graph: Vec<Kmer>;
-
-        if graph.paths.is_empty() {
-            // No info on paths available
-            kmers_on_graph = generate_kmers(
+        let kmers_on_graph: Vec<Kmer> = match graph.paths.is_empty() {
+            true => generate_kmers(
                 graph,
                 kmer_length as u64,
                 Some(max_furcations),
                 Some(max_degree),
-            );
-        } else {
-            // Optimize by using paths
-            kmers_on_graph = generate_kmers_linearly(
+            ),
+            false => generate_kmers_linearly(
                 graph,
                 kmer_length as u64,
                 Some(max_furcations),
                 Some(max_degree),
-            );
-        }
-
-        // Store graph kmers to file
-        let kmer_graph_filename : String = out_prefix.to_owned() + ".kgph";
-        let encoded_kmer_graph = bincode::serialize(&kmers_on_graph).unwrap();
-        store_object_to_file(&encoded_kmer_graph, &kmer_graph_filename);
-
+            ),
+        };
 
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
-        // Store kmers_positions_on_ref to file
-        let kmer_pos_filename : String = out_prefix.to_owned() + ".kpos";
-        let encoded_kmer_pos = bincode::serialize(&kmers_positions_on_ref).unwrap();
-        store_object_to_file(&encoded_kmer_pos, &kmer_pos_filename);
+        serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph");
+        serialize_object_to_file(&kmers_positions_on_ref, out_prefix.clone() + ".kpos");
 
         // First obtain the kmers' hashes
-        let hash_build = RandomState::with_seeds(0,0,0,0);
+        let hash_build = RandomState::with_seeds(0, 0, 0, 0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
-        println!("{:#?}", hashes);
 
         // Then generate the table
-        let kmers_table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
-        println!("{:#?}", kmers_table);
-
-        // Store the table to file
-        let table_filename : String = out_prefix.to_owned() + ".bbx";
-        let encoded_table = bincode::serialize(&kmers_table).unwrap();
-        store_object_to_file(&encoded_table, &table_filename);
+        let kmers_table =
+            NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+        serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx");
 
         Index {
             kmer_length,
@@ -161,24 +132,26 @@ impl Index {
             n_kmer_pos: 0,
             //kmer_pos_ref: vec![],
             kmer_pos_table: kmers_positions_on_ref,
-            loaded: true
+            loaded: true,
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::kmer::{generate_kmers_linearly, generate_kmers_linearly_2};
     use handlegraph::hashgraph::Node;
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
     use substring::Substring;
 
+    use crate::kmer::{generate_kmers_linearly, generate_kmers_linearly_2};
+
+    use super::*;
+
     /// This function creates a simple graph, used for debugging
-    ///        | 2: CT \
-    /// 1:  A            4: GCA
-    ///        \ 3: GA |
+            ///        | 2: CT \
+            /// 1:  A            4: GCA
+            ///        \ 3: GA |
     fn create_simple_graph() -> HashGraph {
         let mut graph: HashGraph = HashGraph::new();
 
@@ -472,9 +445,10 @@ mod test {
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
-        let hash_build = RandomState::with_seeds(0,0,0,0);
+        let hash_build = RandomState::with_seeds(0, 0, 0, 0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
-        let kmers_mphf = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+        let kmers_mphf =
+            NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
 
         for i in 0..kmers_on_graph.len() {
             let kmer = kmers_on_graph.get(i).unwrap();
@@ -483,9 +457,7 @@ mod test {
 
             let table_value = kmers_mphf.get(hash).unwrap();
             assert_eq!(kmer_pos_on_ref, table_value);
-
         }
-
     }
 
     #[test]
@@ -502,31 +474,33 @@ mod test {
 
         // Check node_ref serialization
         let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
-        let deserialized_node_ref : Vec<NodeRef> = bincode::deserialize(&encoded_node_ref).unwrap();
+        let deserialized_node_ref: Vec<NodeRef> = bincode::deserialize(&encoded_node_ref).unwrap();
         assert_eq!(node_ref, deserialized_node_ref);
 
         // Check bitvec serialization
         let encoded_seq_bv = bincode::serialize(&seq_bv).unwrap();
-        let deserialized_seq_bv : BitVec = bincode::deserialize(&encoded_seq_bv).unwrap();
+        let deserialized_seq_bv: BitVec = bincode::deserialize(&encoded_seq_bv).unwrap();
         assert_eq!(seq_bv, deserialized_seq_bv);
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
         // Check kmer_graph serialization
         let encoded_kmer_graph = bincode::serialize(&kmers_on_graph).unwrap();
-        let deserialized_kmer_graph : Vec<Kmer> = bincode::deserialize(&encoded_kmer_graph).unwrap();
+        let deserialized_kmer_graph: Vec<Kmer> = bincode::deserialize(&encoded_kmer_graph).unwrap();
         assert_eq!(kmers_on_graph, deserialized_kmer_graph);
 
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
-        let hash_build = RandomState::with_seeds(0,0,0,0);
+        let hash_build = RandomState::with_seeds(0, 0, 0, 0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
-        let kmers_table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+        let kmers_table =
+            NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
 
         //Check kmer_table serialization
         let encoded_table = bincode::serialize(&kmers_table).unwrap();
-        let deserialized_table : NoKeyBoomHashMap<u64, KmerPos> = bincode::deserialize(&encoded_table).unwrap();
+        let deserialized_table: NoKeyBoomHashMap<u64, KmerPos> =
+            bincode::deserialize(&encoded_table).unwrap();
         //assert_eq!(kmers_table, deserialized_table);
 
         for i in 0..kmers_on_graph.len() {
@@ -537,8 +511,6 @@ mod test {
             let table_value = kmers_table.get(hash).unwrap();
             let deserialized_table_value = deserialized_table.get(hash).unwrap();
             assert_eq!(table_value, deserialized_table_value);
-
         }
-
     }
 }
