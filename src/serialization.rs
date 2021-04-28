@@ -9,31 +9,16 @@ use boomphf::Mphf;
 use crate::kmer::KmerPos;
 use std::marker::PhantomData;
 use bitvector::*;
+use std::fs::File;
+use std::io::Write;
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Handle")]
 pub(crate) struct SerializableHandle(u64);
 
-/*
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "Mphf")]
-pub(crate) struct SerializableMphf<T> {
-    pub bitvecs: Vec<BitVector>,
-    pub ranks: Vec<Vec<u64>>,
-    pub phantom: PhantomData<T>,
+pub fn serialize_object_to_file<T>(object_to_serialize :&T, fileName :&String) -> std::io::Result<()> {
+    let serialized_object = bincode::serialize(&object_to_serialize).unwrap();
+    let mut file = File::create(fileName)?;
+    file.write_all(&serialized_object)?;
+    Ok(())
 }
-
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "NoKeyBoomHashMap")]
-pub(crate) struct SerializableNoKeyBoomHashMap<K,D1> {
-    pub mphf: SerializableMphf<K>,
-    pub values: Vec<D1>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct KmerTable {
-    #[serde(with = "SerializableNoKeyBoomHashMap")]
-    pub table: NoKeyBoomHashMap<u64, KmerPos>,
-    pub size: u64
-}
- */

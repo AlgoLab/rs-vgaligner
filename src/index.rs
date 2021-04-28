@@ -137,19 +137,12 @@ impl Index {
         println!("{:#?}", hashes);
 
         // Then generate the table
-        //let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
-        let table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
-        //let kmers_mphf = NoKeyBoomHashMap::new_parallel(hashes.clone(), (0..hashes.len()).collect());
-        //println!("{:#?}", kmers_mphf);
-
-        //let table = KmerTable {
-        //    table: NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone()),
-        //    size: hashes.len() as u64,
-        //};
+        let kmers_table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+        println!("{:#?}", kmers_table);
 
         // Store the table to file
         let table_filename : String = out_prefix.to_owned() + ".bbx";
-        let encoded_table = bincode::serialize(&table).unwrap();
+        let encoded_table = bincode::serialize(&kmers_table).unwrap();
         store_object_to_file(&encoded_table, &table_filename);
 
         Index {
@@ -481,7 +474,7 @@ mod test {
 
         let hash_build = RandomState::with_seeds(0,0,0,0);
         let hashes = generate_hash(&kmers_on_graph, &hash_build);
-        let kmers_mphf = BoomHashMap::new(hashes.clone(), kmers_positions_on_ref.clone());
+        let kmers_mphf = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
 
         for i in 0..kmers_on_graph.len() {
             let kmer = kmers_on_graph.get(i).unwrap();
@@ -490,6 +483,60 @@ mod test {
 
             let table_value = kmers_mphf.get(hash).unwrap();
             assert_eq!(kmer_pos_on_ref, table_value);
+
+        }
+
+    }
+
+    #[test]
+    fn test_serialization() {
+        let mut graph = create_simple_graph();
+
+        let seq_length = find_graph_seq_length(&graph);
+
+        // Generate the forward
+        let total_length = find_graph_seq_length(&graph);
+        let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
+        let mut node_ref: Vec<NodeRef> = Vec::new();
+        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+
+        // Check node_ref serialization
+        let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
+        let deserialized_node_ref : Vec<NodeRef> = bincode::deserialize(&encoded_node_ref).unwrap();
+        assert_eq!(node_ref, deserialized_node_ref);
+
+        // Check bitvec serialization
+        let encoded_seq_bv = bincode::serialize(&seq_bv).unwrap();
+        let deserialized_seq_bv : BitVec = bincode::deserialize(&encoded_seq_bv).unwrap();
+        assert_eq!(seq_bv, deserialized_seq_bv);
+
+        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
+
+        // Check kmer_graph serialization
+        let encoded_kmer_graph = bincode::serialize(&kmers_on_graph).unwrap();
+        let deserialized_kmer_graph : Vec<Kmer> = bincode::deserialize(&encoded_kmer_graph).unwrap();
+        assert_eq!(kmers_on_graph, deserialized_kmer_graph);
+
+        let kmers_positions_on_ref: Vec<KmerPos> =
+            generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
+
+        let hash_build = RandomState::with_seeds(0,0,0,0);
+        let hashes = generate_hash(&kmers_on_graph, &hash_build);
+        let kmers_table = NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+
+        //Check kmer_table serialization
+        let encoded_table = bincode::serialize(&kmers_table).unwrap();
+        let deserialized_table : NoKeyBoomHashMap<u64, KmerPos> = bincode::deserialize(&encoded_table).unwrap();
+        //assert_eq!(kmers_table, deserialized_table);
+
+        for i in 0..kmers_on_graph.len() {
+            let kmer = kmers_on_graph.get(i).unwrap();
+            let kmer_pos_on_ref = kmers_positions_on_ref.get(i).unwrap();
+            let hash = hashes.get(i).unwrap();
+
+            let table_value = kmers_table.get(hash).unwrap();
+            let deserialized_table_value = deserialized_table.get(hash).unwrap();
+            assert_eq!(table_value, deserialized_table_value);
 
         }
 
