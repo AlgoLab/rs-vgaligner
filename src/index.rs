@@ -1,13 +1,13 @@
 use ahash::RandomState;
-use boomphf::hashmap::BoomHashMap;
+
 use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
-use handlegraph::handle::{Edge, Handle};
+use handlegraph::handle::{Edge};
 use handlegraph::hashgraph::HashGraph;
-use serde_with::serde_as;
+
 
 use crate::dna::reverse_complement;
-use crate::io::store_object_to_file;
+
 use crate::kmer::{
     generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
 };
@@ -63,11 +63,11 @@ impl Index {
         kmer_length: u64,
         max_furcations: u64,
         max_degree: u64,
-        sampling_rate: f32,
+        _sampling_rate: f32,
         out_prefix: String,
     ) -> Self {
         // Get the number of nodes in the graph
-        let number_nodes = graph.graph.len();
+        let _number_nodes = graph.graph.len();
 
         // Get the length of the sequence encoded by the graph
         let seq_length = find_graph_seq_length(graph);
@@ -78,6 +78,7 @@ impl Index {
         // Store offsets in fwd and edge vector
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
+        // Get the forward and reverse encoded by the linearized graph
         let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
 
@@ -86,34 +87,47 @@ impl Index {
         serialize_object_to_file(&node_ref, out_prefix.clone() + ".gyn");
         serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv");
 
+        // Generate the kmers from the graph
         let kmers_on_graph: Vec<Kmer> = match graph.paths.is_empty() {
+
+            // If paths are not available (= not provided in the input GFA)
+            // use the same kmer-generation approach used in dozyg
             true => generate_kmers(
                 graph,
                 kmer_length as u64,
                 Some(max_furcations),
                 Some(max_degree),
             ),
+
+            // Otherwise, use an optimized approach that works by exploring each path
+            // linearly
             false => generate_kmers_linearly(
                 graph,
                 kmer_length as u64,
                 Some(max_furcations),
                 Some(max_degree),
             ),
+
         };
 
+        // Translate the kmers positions on the graph (obtained by the previous function)
+        // into positions on the linearized forward or reverse sequence, according to which
+        // strand each kmer was on.
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
         serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph");
         serialize_object_to_file(&kmers_positions_on_ref, out_prefix.clone() + ".kpos");
 
-        // First obtain the kmers' hashes
+        // Obtain the kmers' hashes, this allows us to work with kmers of any size
         let hash_build = RandomState::with_seeds(0, 0, 0, 0);
-        let hashes = generate_hash(&kmers_on_graph, &hash_build);
+        let kmers_hashes = generate_hash(&kmers_on_graph, &hash_build);
 
-        // Then generate the table
+        // Generate a table which stores the kmer positions in a memory-efficient way, as keys aren't
+        // actually stored (this is done by using a minimal perfect hash function). This however
+        // allows for false positives, which will be handled in the clustering phase.
         let kmers_table =
-            NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
+            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_positions_on_ref.clone());
         serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx");
 
         Index {
@@ -139,12 +153,12 @@ impl Index {
 
 #[cfg(test)]
 mod test {
-    use handlegraph::hashgraph::Node;
+    
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
-    use substring::Substring;
+    
 
-    use crate::kmer::{generate_kmers_linearly, generate_kmers_linearly_2};
+    use crate::kmer::{generate_kmers_linearly};
 
     use super::*;
 
@@ -205,7 +219,7 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_graph = generate_kmers(&graph, 3, Some(100), Some(100));
         let kmers_ref = generate_pos_on_ref(&graph, &kmers_graph, &total_length, &node_ref);
@@ -230,7 +244,7 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
         let kmers_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
@@ -430,7 +444,7 @@ mod test {
 
     #[test]
     fn test_table() {
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
 
         let seq_length = find_graph_seq_length(&graph);
 
@@ -438,7 +452,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
@@ -450,8 +464,9 @@ mod test {
         let kmers_mphf =
             NoKeyBoomHashMap::new_parallel(hashes.clone(), kmers_positions_on_ref.clone());
 
+        // Check that kmer-positions are stored correctly
         for i in 0..kmers_on_graph.len() {
-            let kmer = kmers_on_graph.get(i).unwrap();
+            let _kmer = kmers_on_graph.get(i).unwrap();
             let kmer_pos_on_ref = kmers_positions_on_ref.get(i).unwrap();
             let hash = hashes.get(i).unwrap();
 
@@ -462,7 +477,7 @@ mod test {
 
     #[test]
     fn test_serialization() {
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
 
         let seq_length = find_graph_seq_length(&graph);
 
@@ -470,7 +485,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
 
         // Check node_ref serialization
         let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
@@ -501,11 +516,10 @@ mod test {
         let encoded_table = bincode::serialize(&kmers_table).unwrap();
         let deserialized_table: NoKeyBoomHashMap<u64, KmerPos> =
             bincode::deserialize(&encoded_table).unwrap();
-        //assert_eq!(kmers_table, deserialized_table);
 
         for i in 0..kmers_on_graph.len() {
-            let kmer = kmers_on_graph.get(i).unwrap();
-            let kmer_pos_on_ref = kmers_positions_on_ref.get(i).unwrap();
+            let _kmer = kmers_on_graph.get(i).unwrap();
+            let _kmer_pos_on_ref = kmers_positions_on_ref.get(i).unwrap();
             let hash = hashes.get(i).unwrap();
 
             let table_value = kmers_table.get(hash).unwrap();

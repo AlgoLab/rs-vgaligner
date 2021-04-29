@@ -107,7 +107,7 @@ fn main() {
     let graph = HashGraph::from_gfa(&gfa);
 
     // STEP 1: Build the index for the input graph
-    let graph_index = Index::build(
+    let _graph_index = Index::build(
         &graph,
         kmer_length,
         max_furcations,

@@ -7,14 +7,18 @@ use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use serde::{Deserialize, Serialize};
 
+/// Additional data about each node, to be used together with seq_bv
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeRef {
-    pub(crate) seq_idx: u64,       // Represents the starting position on the fwd
-    pub(crate) edge_idx: u64,      // Represents the starting position on the edge vector
-    pub(crate) edges_to_node: u64, // Represents the number of incoming edges to a node
+    /// Starting position on the forward
+    pub(crate) seq_idx: u64,
+    /// Starting position on the edge vector
+    pub(crate) edge_idx: u64,
+    /// Number of incoming edges to a node
+    pub(crate) edges_to_node: u64,
 }
 
-/// Finds the length of the sequence encoded by the graph
+/// Find the length of the sequence encoded by the graph
 pub fn find_graph_seq_length(graph: &HashGraph) -> u64 {
     let mut total_length = 0;
     for value in graph.handles_iter() {
@@ -24,7 +28,7 @@ pub fn find_graph_seq_length(graph: &HashGraph) -> u64 {
     total_length
 }
 
-/// Finds the forward sequence encoded in a (not necessarily partially ordered) graph
+/// Find the forward sequence encoded in a (not necessarily partially ordered) graph
 /// This function uses a BFS visit, and retrieves the forward sequence from each
 /// node it visits, then concatenates them into a string.
 /// It also requires a new bivector to be passed as input, this will
@@ -69,7 +73,7 @@ pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
     forward
 }
 
-/// Finds the forward sequence in a partially ordered graph, by following
+/// Find the forward sequence in a partially ordered graph, by following
 /// the order of the handles. Also computes the bitvector representing
 /// the node start positions in the forward, and the Node References.
 pub fn find_sequence_po(
@@ -127,7 +131,7 @@ pub fn find_sequence_po(
     forward
 }
 
-/// Returns the rank vector of a given bitvector bv
+/// Return the rank vector of a given bitvector bv
 /// The rank for an element bv[i] is defined as the number of 1s in [bv[0]...bv[i]]
 /// We compute the rank for every element in bv, and put these ranks in a Vec
 pub fn get_bv_rank(bv: &BitVec) -> Vec<u32> {
