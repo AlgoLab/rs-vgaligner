@@ -13,23 +13,23 @@ use crate::kmer::{
 };
 use crate::serialization::serialize_object_to_file;
 use crate::utils::{find_graph_seq_length, find_sequence_po, NodeRef};
+use handlegraph::handlegraph::HandleGraph;
 
-#[derive(Default)]
 pub struct Index {
     // the kmer size that this graph was built on
     kmer_length: u64,
     // consider only kmers where to_key(kmer) % sampling_mod == 0
-    sampling_length: u64,
+    //sampling_length: u64,
     // total sequence length of the graph
     seq_length: u64,
     // forward sequence of the graph, stored here for fast access during alignment
     seq_fwd: String,
     // reverse complemented sequence of the graph, for fast access during alignment
     seq_rev: String,
-    // mark node starts
+    // mark node starts in forward
     seq_bv: BitVec,
     // lets us map between our seq vector and handles (when our input graph is compacted!)
-    //seq_by_rank: BitVec, //TODO: check this
+    //seq_by_rank: BitVec,
     // edge count
     n_edges: u64,
     // what's the most-efficient graph topology we can store?
@@ -41,22 +41,20 @@ pub struct Index {
     // number of kmers in the index
     n_kmers: u64,
     // number of kmer positions in the index
-    n_kmer_pos: u64,
+    //n_kmer_pos: u64,
     // our kmer hash table
-    //bhpf :  TODO: hash
+    //bhpf :
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
     //kmer_pos_ref: Vec<u64>,
-    // our kmer positions
-    kmer_pos_table: Vec<KmerPos>,
+    // our graph kmers
+    kmers_on_graph : Vec<Kmer>,
+    // our kmer positions table
+    kmer_pos_table: NoKeyBoomHashMap<u64, KmerPos>,
     // if we're loaded, helps during teardown
     loaded: bool,
 }
 
 impl Index {
-    //See this pattern here: https://stackoverflow.com/a/41510505/5627359
-    fn new() -> Self {
-        Default::default()
-    }
 
     pub fn build(
         graph: &HashGraph,
@@ -67,7 +65,7 @@ impl Index {
         out_prefix: String,
     ) -> Self {
         // Get the number of nodes in the graph
-        let _number_nodes = graph.graph.len();
+        let number_nodes = graph.graph.len() as u64;
 
         // Get the length of the sequence encoded by the graph
         let seq_length = find_graph_seq_length(graph);
@@ -77,6 +75,10 @@ impl Index {
 
         // Store offsets in fwd and edge vector
         let mut node_ref: Vec<NodeRef> = Vec::new();
+
+        // Store edges
+        let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
+        graph_edges.sort();
 
         // Get the forward and reverse encoded by the linearized graph
         let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
@@ -132,20 +134,21 @@ impl Index {
 
         Index {
             kmer_length,
-            sampling_length: 0,
+            //sampling_length: 0,
             seq_length,
             seq_fwd,
             seq_rev,
             seq_bv,
             //seq_by_rank: Default::default(),
-            n_edges: 0,
-            edges: vec![],
-            n_nodes: 0,
+            n_edges: graph_edges.len() as u64,
+            edges: graph_edges,
+            n_nodes: number_nodes,
             node_ref,
             n_kmers: kmers_positions_on_ref.len() as u64,
-            n_kmer_pos: 0,
+            //n_kmer_pos: 0,
             //kmer_pos_ref: vec![],
-            kmer_pos_table: kmers_positions_on_ref,
+            kmers_on_graph,
+            kmer_pos_table: kmers_table,
             loaded: true,
         }
     }

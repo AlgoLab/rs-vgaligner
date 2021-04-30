@@ -79,7 +79,7 @@ pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
 pub fn find_sequence_po(
     graph: &HashGraph,
     seq_bv: &mut BitVec,
-    node_ref: &mut Vec<NodeRef>,
+    node_ref: &mut Vec<NodeRef>
 ) -> String {
     let mut forward: String = String::new();
     let mut bv_pos: u64 = 0;
