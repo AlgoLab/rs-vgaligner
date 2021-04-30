@@ -1,10 +1,9 @@
-use std::fs::File;
 
+/*
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-
 use bv::BitVec;
-
 use crate::kmer::{Kmer, KmerPos};
 
 /// This function prints kmers data
@@ -125,8 +124,9 @@ pub fn verify_kmers_2(seq: &str, kmers: &Vec<Kmer>, kmer_pos: &Vec<KmerPos>, pat
     }
 }
 
-pub fn store_object_to_file(serialized_object: &[u8], fileName: &String) -> std::io::Result<()> {
-    let mut file = File::create(fileName)?;
+pub fn store_object_to_file(serialized_object: &[u8], file_name: &String) -> std::io::Result<()> {
+    let mut file = File::create(file_name)?;
     file.write_all(serialized_object)?;
     Ok(())
 }
+ */

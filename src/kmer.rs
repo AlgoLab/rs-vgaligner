@@ -1,12 +1,10 @@
 use std::cmp::min;
 use std::collections::VecDeque;
 
-use ahash::AHashMap;
 use ahash::CallHasher;
 use ahash::RandomState;
 
 use bstr::ByteVec;
-use bv::BitVec;
 use handlegraph::handle::{Direction, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
@@ -238,14 +236,12 @@ pub fn generate_kmers_linearly(
 ) -> Vec<Kmer> {
     assert!(!graph.paths.is_empty());
 
-    let mut kmers: Vec<Kmer> = Vec::new();
-
     // This requires two iterations, one on the forward (handles) and one on the reverse (handles).
     let forward_kmers = generate_kmers_linearly_forward(graph, k, edge_max, degree_max);
     let reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
 
     // Merge the kmers obtained previously
-    kmers = merge_kmers(forward_kmers, reverse_kmers);
+    let kmers = merge_kmers(forward_kmers, reverse_kmers);
 
     kmers
 }
@@ -500,6 +496,7 @@ pub fn generate_pos_on_ref(
     kmers_on_ref
 }
 
+/*
 // Not used anymore, may still be useful
 fn generate_pos_on_forward(
     kmers_on_graph: &Vec<Kmer>,
@@ -512,9 +509,9 @@ fn generate_pos_on_forward(
     for kmer in kmers_on_graph {
         // -1 required because i-eth node id is i-1-eth in node list
         let kmer_handle = kmer.first;
-        let kmer_nodeId = kmer_handle.unpack_number() - 1;
+        let kmer_node_id = kmer_handle.unpack_number() - 1;
 
-        let noderef_kmer: &NodeRef = node_ref.get(kmer_nodeId as usize).unwrap();
+        let noderef_kmer: &NodeRef = node_ref.get(kmer_node_id as usize).unwrap();
         let start_pos_on_fwd = noderef_kmer.seq_idx + kmer.begin;
         let end_pos_on_fwd = noderef_kmer.seq_idx + kmer.end;
 
@@ -529,6 +526,7 @@ fn generate_pos_on_forward(
 
     kmers_on_fwd
 }
+ */
 
 /// Generate the hashes of the sequence encoded in each kmer
 pub fn generate_hash(kmers_on_graph: &Vec<Kmer>, hash_builder: &RandomState) -> Vec<u64> {

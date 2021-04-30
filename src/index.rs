@@ -1,13 +1,9 @@
 use ahash::RandomState;
-
 use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
 use handlegraph::handle::{Edge};
 use handlegraph::hashgraph::HashGraph;
-
-
 use crate::dna::reverse_complement;
-
 use crate::kmer::{
     generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
 };
@@ -84,10 +80,10 @@ impl Index {
         let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
 
-        serialize_object_to_file(&seq_fwd, out_prefix.clone() + ".sqf");
-        serialize_object_to_file(&seq_rev, out_prefix.clone() + ".sqr");
-        serialize_object_to_file(&node_ref, out_prefix.clone() + ".gyn");
-        serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv");
+        serialize_object_to_file(&seq_fwd, out_prefix.clone() + ".sqf").ok();
+        serialize_object_to_file(&seq_rev, out_prefix.clone() + ".sqr").ok();
+        serialize_object_to_file(&node_ref, out_prefix.clone() + ".gyn").ok();
+        serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv").ok();
 
         // Generate the kmers from the graph
         let kmers_on_graph: Vec<Kmer> = match graph.paths.is_empty() {
@@ -118,8 +114,8 @@ impl Index {
         let kmers_positions_on_ref: Vec<KmerPos> =
             generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
 
-        serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph");
-        serialize_object_to_file(&kmers_positions_on_ref, out_prefix.clone() + ".kpos");
+        serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
+        serialize_object_to_file(&kmers_positions_on_ref, out_prefix.clone() + ".kpos").ok();
 
         // Obtain the kmers' hashes, this allows us to work with kmers of any size
         let hash_build = RandomState::with_seeds(0, 0, 0, 0);
@@ -130,7 +126,7 @@ impl Index {
         // allows for false positives, which will be handled in the clustering phase.
         let kmers_table =
             NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_positions_on_ref.clone());
-        serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx");
+        serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx").ok();
 
         Index {
             kmer_length,

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Write;
 
 use handlegraph::handle::Handle;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Handle")]
@@ -14,10 +14,10 @@ pub(crate) struct SerializableHandle(u64);
 /// and put the result of the serialization in a file
 pub fn serialize_object_to_file<T: Serialize>(
     object_to_serialize: &T,
-    fileName: String,
+    file_name: String,
 ) -> std::io::Result<()> {
     let serialized_object = bincode::serialize(&object_to_serialize).unwrap();
-    let mut file = File::create(fileName)?;
-    file.write_all(&serialized_object)?;
+    let mut file = File::create(&file_name).expect(&format!("Couldn't create file {}",&file_name));
+    file.write_all(&serialized_object).expect(&format!("Couldn't write to file {}", &file_name));
     Ok(())
 }
