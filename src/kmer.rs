@@ -127,6 +127,11 @@ pub fn generate_kmers(
                     forks: 0,
                 };
 
+                // Ignore Ns in kmer generation
+                if kmer.seq.contains('N') {
+                    continue;
+                }
+
                 // If the kmer has already reached size k...
                 // NOTE: this implies that the sequence encoded by the current handle
                 // has size >= k
@@ -180,6 +185,11 @@ pub fn generate_kmers(
                 let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
                 let str_to_add = handle_seq.substring(0, end as usize).to_string();
                 incomplete_kmer.extend_kmer(str_to_add, handle);
+
+                // Ignore Ns during kmer generation
+                if incomplete_kmer.seq.contains('N') {
+                    continue;
+                }
 
                 if (incomplete_kmer.seq.len() as u64) == k {
                     if !complete_kmers.contains(&incomplete_kmer) {
@@ -280,6 +290,11 @@ fn generate_kmers_linearly_forward(
                 let str_to_add = handle_seq.substring(0, end as usize).to_string();
                 incomplete_kmer.extend_kmer(str_to_add, *handle);
 
+                // Ignore Ns during kmer generation
+                if incomplete_kmer.seq.contains('N') {
+                    continue;
+                }
+
                 if (incomplete_kmer.seq.len() as u64) == k {
                     if !kmers.contains(&incomplete_kmer) {
                         kmers.push(incomplete_kmer);
@@ -305,8 +320,13 @@ fn generate_kmers_linearly_forward(
                     forks: 0,
                 };
 
+                // Ignore Ns during kmer generation
+                if kmer.seq.contains('N') {
+                    continue;
+                }
+
                 if (kmer.seq.len() as u64) == k {
-                    if !kmers.contains(&kmer) {
+                    if !kmer.seq.contains('N') && !kmers.contains(&kmer) {
                         kmers.push(kmer);
                     }
                 } else {
@@ -363,6 +383,11 @@ pub fn generate_kmers_linearly_reverse(
                 let str_to_add = handle_seq.substring(0, end as usize).to_string();
                 incomplete_kmer.extend_kmer(str_to_add, handle);
 
+                // Ignore Ns during kmer generation
+                if incomplete_kmer.seq.contains('N') {
+                    continue;
+                }
+
                 if (incomplete_kmer.seq.len() as u64) == k {
                     if !kmers.contains(&incomplete_kmer) {
                         kmers.push(incomplete_kmer);
@@ -387,6 +412,11 @@ pub fn generate_kmers_linearly_reverse(
                     handle_orient: false,
                     forks: 0,
                 };
+
+                // Ignore Ns during kmer generation
+                if kmer.seq.contains('N') {
+                    continue;
+                }
 
                 if (kmer.seq.len() as u64) == k {
                     if !kmers.contains(&kmer) {

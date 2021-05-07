@@ -8,7 +8,7 @@ use crate::kmer::{
     generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
 };
 use crate::serialization::serialize_object_to_file;
-use crate::utils::{find_graph_seq_length, find_sequence_po, NodeRef};
+use crate::utils::{find_graph_seq_length, find_forward_sequence, NodeRef};
 use handlegraph::handlegraph::HandleGraph;
 
 pub struct Index {
@@ -77,7 +77,7 @@ impl Index {
         graph_edges.sort();
 
         // Get the forward and reverse encoded by the linearized graph
-        let seq_fwd = find_sequence_po(graph, &mut seq_bv, &mut node_ref);
+        let seq_fwd = find_forward_sequence(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
 
         serialize_object_to_file(&seq_fwd, out_prefix.clone() + ".sqf").ok();
@@ -218,7 +218,7 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_graph = generate_kmers(&graph, 3, Some(100), Some(100));
         let kmers_ref = generate_pos_on_ref(&graph, &kmers_graph, &total_length, &node_ref);
@@ -243,7 +243,7 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
         let kmers_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
@@ -266,7 +266,7 @@ mod test {
         assert_eq!(total_length, 8);
         assert_eq!(
             "ACTGAGCA",
-            find_sequence_po(&graph, &mut seq_bv, &mut node_ref)
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref)
         );
 
         use bv::*;
@@ -351,7 +351,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         assert_eq!(total_length, 8);
         assert_eq!("ACGTTTCA", forward);
@@ -407,7 +407,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         assert_eq!(total_length, 8);
         assert_eq!("ACGTTTCA", forward);
@@ -451,7 +451,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
@@ -484,7 +484,7 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let _forward = find_sequence_po(&graph, &mut seq_bv, &mut node_ref);
+        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         // Check node_ref serialization
         let encoded_node_ref = bincode::serialize(&node_ref).unwrap();

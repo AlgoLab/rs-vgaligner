@@ -33,7 +33,7 @@ pub fn find_graph_seq_length(graph: &HashGraph) -> u64 {
 /// node it visits, then concatenates them into a string.
 /// It also requires a new bivector to be passed as input, this will
 /// contain the starting positions of each node in the forward (and reverse) sequence.
-pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
+pub fn find_forward_sequence_bfs(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
     let mut forward: String = String::new();
     let mut bv_pos: u64 = 0;
 
@@ -76,7 +76,7 @@ pub fn find_sequence(graph: &HashGraph, seq_bv: &mut BitVec) -> String {
 /// Find the forward sequence in a partially ordered graph, by following
 /// the order of the handles. Also computes the bitvector representing
 /// the node start positions in the forward, and the Node References.
-pub fn find_sequence_po(
+pub fn find_forward_sequence(
     graph: &HashGraph,
     seq_bv: &mut BitVec,
     node_ref: &mut Vec<NodeRef>
