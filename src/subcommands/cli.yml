@@ -1,0 +1,58 @@
+name: rs-vgalign
+version: "0.2"
+author: Francesco Porto <francesco.porto97@gmail.com>
+about: Aligns reads to a Variation Graph
+args:
+  - verbose:
+      short: v
+      multiple: true
+      help: Sets the level of verbosity
+subcommands:
+  - index:
+      about: creates the index
+      args:
+        - input:
+            short: i
+            long: input
+            value_name: FILE
+            help: Sets the input file to use
+            required: true
+            takes_value: true
+        - out-prefix:
+            short: o
+            long: out
+            value_name: STRING
+            help: Save our index with this prefix (defaults to input file name and path)
+            required: false
+            takes_value: true
+        - kmer-length:
+            short: k
+            long: kmer-length
+            value_name: INTEGER
+            help: Sets the size of each k-mer
+            required: true
+            takes_value: true
+        - max-furcations:
+            short: e
+            long: max-furcations
+            value_name: INTEGER
+            help: Remove nodes that have degree greater that this level
+            required: false
+            takes_value: true
+        - sampling-rate:
+            short: r
+            long: sampling-rate
+            value_name: FLOAT
+            help: Build a modimizer index by keeping kmers whose hash % round(RATE/1) == 0
+            required: false
+            takes_value: true
+  - map:
+        about: map the reads against the index
+        args:
+            - input:
+                  short: i
+                  long: input
+                  value_name: FILE
+                  help: Sets the input file to use
+                  required: true
+                  takes_value: true
