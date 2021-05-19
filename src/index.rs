@@ -7,10 +7,12 @@ use crate::dna::reverse_complement;
 use crate::kmer::{
     generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
 };
-use crate::serialization::serialize_object_to_file;
+use crate::serialization::{serialize_object_to_file, deserialize_object_from_file};
 use crate::utils::{find_graph_seq_length, find_forward_sequence, NodeRef};
 use handlegraph::handlegraph::HandleGraph;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub struct Index {
     // the kmer size that this graph was built on
     kmer_length: u64,
@@ -43,11 +45,21 @@ pub struct Index {
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
     //kmer_pos_ref: Vec<u64>,
     // our graph kmers
-    kmers_on_graph : Vec<Kmer>,
+    kmers_on_graph: Vec<Kmer>,
     // our kmer positions table
     kmer_pos_table: NoKeyBoomHashMap<u64, KmerPos>,
     // if we're loaded, helps during teardown
     loaded: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Metadata {
+    seq_length : u64,
+    kmer_length: u64,
+    sampling_mod: f32,
+    n_nodes: u64,
+    n_edges: u64,
+    n_kmers: u64
 }
 
 impl Index {
@@ -128,6 +140,19 @@ impl Index {
             NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_positions_on_ref.clone());
         serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx").ok();
 
+        // Generate additional metadata, that will be used when rebuilding the index
+        let meta = Metadata {
+            seq_length,
+            kmer_length,
+            sampling_mod: _sampling_rate,
+            n_nodes: graph.node_count() as u64,
+            n_edges: graph.edge_count() as u64,
+            n_kmers: kmers_positions_on_ref.len() as u64
+        };
+        serialize_object_to_file(&meta, out_prefix.clone() + ".mtd").ok();
+
+        // Finally, return the index
+        // Maybe could be removed?
         Index {
             kmer_length,
             //sampling_length: 0,
@@ -145,10 +170,48 @@ impl Index {
             //kmer_pos_ref: vec![],
             kmers_on_graph,
             kmer_pos_table: kmers_table,
+            loaded: false,
+        }
+    }
+
+    pub fn load_from_prefix(out_prefix: String) -> Self {
+        let seq_fwd : String = deserialize_object_from_file(out_prefix.clone() + ".sqf");
+        let seq_rev : String = deserialize_object_from_file(out_prefix.clone() + ".sqr");
+        let node_ref : Vec<NodeRef> = deserialize_object_from_file(out_prefix.clone() + ".gyn");
+        let seq_bv : BitVec = deserialize_object_from_file(out_prefix.clone() + ".sbv");
+
+        let kmers_on_graph: Vec<Kmer> =
+            deserialize_object_from_file(out_prefix.clone() + ".kgph");
+        let kmer_positions_on_ref: Vec<KmerPos> =
+            deserialize_object_from_file(out_prefix.clone() + ".kpos");
+
+        let kmers_table: NoKeyBoomHashMap<u64,KmerPos> =
+            deserialize_object_from_file(out_prefix.clone() + ".bbx");
+
+        let meta : Metadata = deserialize_object_from_file(out_prefix.to_string() + ".mtd");
+
+        Index {
+            kmer_length: meta.kmer_length,
+            seq_length: meta.seq_length,
+            seq_fwd,
+            seq_rev,
+            seq_bv,
+            //seq_by_rank: Default::default(),
+            n_edges: meta.n_edges,
+            edges: Vec::new(),
+            n_nodes: meta.n_nodes,
+            node_ref,
+            n_kmers: meta.n_kmers,
+            //n_kmer_pos: 0,
+            //kmer_pos_ref: vec![],
+            kmers_on_graph,
+            kmer_pos_table: kmers_table,
             loaded: true,
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod test {

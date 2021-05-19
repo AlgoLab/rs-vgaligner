@@ -1,8 +1,9 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write, Read, BufReader};
 
 use handlegraph::handle::Handle;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Handle")]
@@ -20,4 +21,14 @@ pub fn serialize_object_to_file<T: Serialize>(
     let mut file = File::create(&file_name).expect(&format!("Couldn't create file {}",&file_name));
     file.write_all(&serialized_object).expect(&format!("Couldn't write to file {}", &file_name));
     Ok(())
+}
+
+/// Deserialize an object of any kind (as long as it implements Deserialize as required by Serde)
+/// and returns the result of the deserialization
+pub fn deserialize_object_from_file<T>(file_name: String) -> T
+    where
+        T: DeserializeOwned,
+{
+    let reader = BufReader::new(File::open(file_name).unwrap());
+    bincode::deserialize_from(reader).unwrap()
 }

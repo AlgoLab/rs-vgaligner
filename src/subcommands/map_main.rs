@@ -1,10 +1,11 @@
 use clap::ArgMatches;
 use crate::map::map_reads;
+use crate::index::Index;
 
 pub fn map_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();
 
-    let in_path_index = matches.value_of("input").unwrap();
+    let idx_prefix = matches.value_of("input").unwrap();
 
     let in_path_file = matches.value_of("input-file").unwrap();
 
@@ -47,6 +48,10 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     let dont_align = matches
         .is_present("dont-align");
+
+    let index = Index::load_from_prefix(idx_prefix.to_string());
+
+    println!("Index: {:#?}",index);
 
     map_reads();
 }
