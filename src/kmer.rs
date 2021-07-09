@@ -14,6 +14,7 @@ use substring::Substring;
 
 use crate::serialization::SerializableHandle;
 use crate::utils::NodeRef;
+use std::ops::Index;
 
 /// Represents a kmer in the graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub struct Kmer {
     /// The number of forks the kmer has been involved in
     forks: u64,
 }
+
 
 impl PartialEq for Kmer {
     fn eq(&self, other: &Self) -> bool {
@@ -136,9 +138,9 @@ pub fn generate_kmers(
                 // NOTE: this implies that the sequence encoded by the current handle
                 // has size >= k
                 if (kmer.seq.len() as u64) == k {
-                    if !complete_kmers.contains(&kmer) {
+                    //if !complete_kmers.contains(&kmer) {
                         complete_kmers.push(kmer);
-                    }
+                    //}
                 } else {
                     // The kmer is incomplete, thus will have to be completed to reach size k
 
@@ -192,9 +194,9 @@ pub fn generate_kmers(
                 }
 
                 if (incomplete_kmer.seq.len() as u64) == k {
-                    if !complete_kmers.contains(&incomplete_kmer) {
+                    //if !complete_kmers.contains(&incomplete_kmer) {
                         complete_kmers.push(incomplete_kmer);
-                    }
+                    //}
                 } else {
                     // NOTE: if there is no neighbor, the kmer does not get re-added
                     // to the incomplete ones, so that the external loop can end
@@ -296,9 +298,9 @@ fn generate_kmers_linearly_forward(
                 }
 
                 if (incomplete_kmer.seq.len() as u64) == k {
-                    if !kmers.contains(&incomplete_kmer) {
+                    //if !kmers.contains(&incomplete_kmer) {
                         kmers.push(incomplete_kmer);
-                    }
+                    //}
                 } else {
                     curr_kmers_to_complete.push(incomplete_kmer);
                 }
@@ -326,9 +328,9 @@ fn generate_kmers_linearly_forward(
                 }
 
                 if (kmer.seq.len() as u64) == k {
-                    if !kmer.seq.contains('N') && !kmers.contains(&kmer) {
+                    //if !kmer.seq.contains('N') && !kmers.contains(&kmer) {
                         kmers.push(kmer);
-                    }
+                    //}
                 } else {
                     curr_kmers_to_complete.push(kmer);
                 }
@@ -389,9 +391,9 @@ pub fn generate_kmers_linearly_reverse(
                 }
 
                 if (incomplete_kmer.seq.len() as u64) == k {
-                    if !kmers.contains(&incomplete_kmer) {
+                    //if !kmers.contains(&incomplete_kmer) {
                         kmers.push(incomplete_kmer);
-                    }
+                    //}
                 } else {
                     curr_kmers_to_complete.push(incomplete_kmer);
                 }
@@ -419,9 +421,9 @@ pub fn generate_kmers_linearly_reverse(
                 }
 
                 if (kmer.seq.len() as u64) == k {
-                    if !kmers.contains(&kmer) {
+                    //if !kmers.contains(&kmer) {
                         kmers.push(kmer);
-                    }
+                    //}
                 } else {
                     curr_kmers_to_complete.push(kmer);
                 }
@@ -521,6 +523,80 @@ pub fn generate_pos_on_ref(
             orient: kmer.handle_orient,
         };
         kmers_on_ref.push(pos);
+    }
+
+    kmers_on_ref
+}
+
+/// This function converts kmer positions on the graph to kmer positions on the forward/reverse
+/// linearization (this is effectively a Kmer -> KmerPos conversion)
+pub fn generate_pos_on_ref_2(
+    graph: &HashGraph,
+    kmers_on_graph: &Vec<Kmer>,
+    seq_length: &u64,
+    node_ref: &Vec<NodeRef>,
+    hashes: &mut Vec<u64>
+) -> Vec<Vec<KmerPos>> {
+    let mut kmers_on_ref: Vec<Vec<KmerPos>> = Vec::new();
+
+    // Hash builder to generate hashes
+    let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
+    let mut last_kmer: Option<String> = None;
+    let mut curr_kmer_positions : Vec<KmerPos> = Vec::new();
+
+    for kmer in kmers_on_graph {
+
+        let first_handle_of_kmer = kmer.first;
+        let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
+        let first_handle_length = first_handle_node.sequence.len();
+
+        let last_handle_of_kmer = kmer.last;
+        let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
+        let last_handle_length = last_handle_node.sequence.len();
+
+        let start_ref = get_seq_pos(
+            &first_handle_of_kmer,
+            node_ref,
+            seq_length,
+            &(first_handle_length as u64),
+        ) + kmer.begin;
+        let end_ref = get_seq_pos(
+            &last_handle_of_kmer,
+            node_ref,
+            seq_length,
+            &(last_handle_length as u64),
+        ) + kmer.end;
+
+        let pos = KmerPos {
+            start: start_ref,
+            end: end_ref,
+            orient: kmer.handle_orient,
+        };
+
+        last_kmer = match last_kmer {
+            // This represents the first iteration
+            None => {
+                curr_kmer_positions.push(pos);
+                Some(kmer.clone().seq)
+            },
+            Some(last_kmer) => {
+                // If the kmer has changed, push the hash of the previous one and the
+                // list of positions
+                if last_kmer != kmer.seq {
+                    let kmer_hash  = u64::get_hash(&kmer.seq, &hash_builder);
+                    hashes.push(kmer_hash);
+                    kmers_on_ref.push(curr_kmer_positions.clone());
+                    curr_kmer_positions = Vec::new();
+                    curr_kmer_positions.push(pos);
+                    Some(kmer.clone().seq)
+                } else {
+                    // if the kmer has not changed, just add it to the list of positions
+                    curr_kmer_positions.push(pos);
+                    Some(last_kmer)
+                }
+            }
+        };
+
     }
 
     kmers_on_ref

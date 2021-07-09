@@ -3,6 +3,7 @@ use gfa::{gfa::GFA, parser::GFAParser};
 use handlegraph::hashgraph::HashGraph;
 use std::path::PathBuf;
 use crate::index::Index;
+use handlegraph::handlegraph::HandleGraph;
 
 pub fn index_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("index").unwrap();

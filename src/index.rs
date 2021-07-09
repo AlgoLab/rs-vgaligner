@@ -1,16 +1,19 @@
 use ahash::RandomState;
 use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
-use handlegraph::handle::{Edge};
 use handlegraph::hashgraph::HashGraph;
+use handlegraph::handle::Edge;
+use handlegraph::handlegraph::HandleGraph;
 use crate::dna::reverse_complement;
 use crate::kmer::{
-    generate_hash, generate_kmers, generate_kmers_linearly, generate_pos_on_ref, Kmer, KmerPos,
+    generate_hash, generate_kmers, generate_kmers_linearly,
+    generate_pos_on_ref, generate_pos_on_ref_2, Kmer, KmerPos,
 };
 use crate::serialization::{serialize_object_to_file, deserialize_object_from_file};
 use crate::utils::{find_graph_seq_length, find_forward_sequence, NodeRef};
-use handlegraph::handlegraph::HandleGraph;
 use serde::{Deserialize, Serialize};
+use rayon::prelude::ParallelSliceMut;
+use std::cmp::Ordering;
 
 #[derive(Debug)]
 pub struct Index {
@@ -47,7 +50,7 @@ pub struct Index {
     // our graph kmers
     kmers_on_graph: Vec<Kmer>,
     // our kmer positions table
-    kmer_pos_table: NoKeyBoomHashMap<u64, KmerPos>,
+    kmer_pos_table: NoKeyBoomHashMap<u64, Vec<KmerPos>>,
     // if we're loaded, helps during teardown
     loaded: bool,
 }
@@ -86,7 +89,8 @@ impl Index {
 
         // Store edges
         let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
-        graph_edges.sort();
+        //let mut graph_edges: Vec<Edge> = graph.edges_par().collect();
+        graph_edges.par_sort();
 
         // Get the forward and reverse encoded by the linearized graph
         let seq_fwd = find_forward_sequence(graph, &mut seq_bv, &mut node_ref);
@@ -98,8 +102,7 @@ impl Index {
         serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv").ok();
 
         // Generate the kmers from the graph
-        let kmers_on_graph: Vec<Kmer> = match graph.paths.is_empty() {
-
+        let mut kmers_on_graph: Vec<Kmer> = match graph.paths.is_empty() {
             // If paths are not available (= not provided in the input GFA)
             // use the same kmer-generation approach used in dozyg
             true => generate_kmers(
@@ -117,27 +120,53 @@ impl Index {
                 Some(max_furcations),
                 Some(max_degree),
             ),
-
         };
+
+        // Sort the kmers so that equal kmers are close to each other
+        kmers_on_graph.par_sort_by(|x,y| x.seq.cmp(&y.seq));
+        //println!("Sorted kmers: {:#?}", kmers_on_graph);
 
         // Translate the kmers positions on the graph (obtained by the previous function)
         // into positions on the linearized forward or reverse sequence, according to which
         // strand each kmer was on.
-        let kmers_positions_on_ref: Vec<KmerPos> =
-            generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
+        //let kmers_positions_on_ref: Vec<KmerPos> =
+        //    generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
+
+        let mut kmers_hashes : Vec<u64> = Vec::new();
+        let mut kmers_pos_on_ref : Vec<Vec<KmerPos>> =
+            generate_pos_on_ref_2(&graph, &kmers_on_graph, &seq_length, &node_ref, &mut kmers_hashes);
+
+        assert_eq!(kmers_hashes.len(), kmers_pos_on_ref.len());
+
+        for positions_list in &mut kmers_pos_on_ref {
+            //println!("Unsorted positions: {:#?}", positions_list);
+            positions_list.dedup();
+            positions_list.par_sort_by(|x,y| match x.orient.cmp(&y.orient) {
+                Ordering::Equal => x.start.cmp(&y.start),
+                other => other,
+            });
+            //println!("Sorted positions: {:#?}", positions_list);
+        }
+
+        /*
+        for i in 0..kmers_hashes.len() {
+            println!("hash: {}, no.kmers: {:#?}", kmers_hashes.get(i).unwrap(), kmers_pos_on_ref.get(i).unwrap().len());
+        }
+         */
 
         serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
-        serialize_object_to_file(&kmers_positions_on_ref, out_prefix.clone() + ".kpos").ok();
+        serialize_object_to_file(&kmers_pos_on_ref, out_prefix.clone() + ".kpos").ok();
 
         // Obtain the kmers' hashes, this allows us to work with kmers of any size
-        let hash_build = RandomState::with_seeds(0, 0, 0, 0);
-        let kmers_hashes = generate_hash(&kmers_on_graph, &hash_build);
+        //let hash_build = RandomState::with_seeds(0, 0, 0, 0);
+        //let kmers_hashes = generate_hash(&kmers_on_graph, &hash_build);
 
         // Generate a table which stores the kmer positions in a memory-efficient way, as keys aren't
-        // actually stored (this is done by using a minimal perfect hash function). This however
-        // allows for false positives, which will be handled in the clustering phase.
+        // actually stored (this is done by using a minimal perfect hash function, which requires
+        // the keys to be known in advance). This however allows for false positives,
+        // which will be handled in the clustering phase.
         let kmers_table =
-            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_positions_on_ref.clone());
+            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_pos_on_ref.clone());
         serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx").ok();
 
         // Generate additional metadata, that will be used when rebuilding the index
@@ -147,7 +176,7 @@ impl Index {
             sampling_mod: _sampling_rate,
             n_nodes: graph.node_count() as u64,
             n_edges: graph.edge_count() as u64,
-            n_kmers: kmers_positions_on_ref.len() as u64
+            n_kmers: kmers_pos_on_ref.len() as u64
         };
         serialize_object_to_file(&meta, out_prefix.clone() + ".mtd").ok();
 
@@ -165,7 +194,7 @@ impl Index {
             edges: graph_edges,
             n_nodes: number_nodes,
             node_ref,
-            n_kmers: kmers_positions_on_ref.len() as u64,
+            n_kmers: kmers_pos_on_ref.len() as u64,
             //n_kmer_pos: 0,
             //kmer_pos_ref: vec![],
             kmers_on_graph,
@@ -185,7 +214,7 @@ impl Index {
         let kmer_positions_on_ref: Vec<KmerPos> =
             deserialize_object_from_file(out_prefix.clone() + ".kpos");
 
-        let kmers_table: NoKeyBoomHashMap<u64,KmerPos> =
+        let kmers_table: NoKeyBoomHashMap<u64,Vec<KmerPos>> =
             deserialize_object_from_file(out_prefix.clone() + ".bbx");
 
         let meta : Metadata = deserialize_object_from_file(out_prefix.to_string() + ".mtd");
@@ -218,16 +247,15 @@ mod test {
     
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
-    
 
     use crate::kmer::{generate_kmers_linearly};
 
     use super::*;
 
     /// This function creates a simple graph, used for debugging
-            ///        | 2: CT \
-            /// 1:  A            4: GCA
-            ///        \ 3: GA |
+    ///        | 2: CT \
+    /// 1:  A            4: GCA
+    ///        \ 3: GA |
     fn create_simple_graph() -> HashGraph {
         let mut graph: HashGraph = HashGraph::new();
 
