@@ -50,7 +50,7 @@ pub struct Index {
     // our graph kmers
     kmers_on_graph: Vec<Kmer>,
     // our kmer positions table
-    kmer_pos_table: NoKeyBoomHashMap<u64, Vec<KmerPos>>,
+    kmer_pos_table: NoKeyBoomHashMap<u64,u64>,
     // if we're loaded, helps during teardown
     loaded: bool,
 }
@@ -129,30 +129,11 @@ impl Index {
         // Translate the kmers positions on the graph (obtained by the previous function)
         // into positions on the linearized forward or reverse sequence, according to which
         // strand each kmer was on.
-        //let kmers_positions_on_ref: Vec<KmerPos> =
-        //    generate_pos_on_ref(&graph, &kmers_on_graph, &seq_length, &node_ref);
-
         let mut kmers_hashes : Vec<u64> = Vec::new();
-        let mut kmers_pos_on_ref : Vec<Vec<KmerPos>> =
-            generate_pos_on_ref_2(&graph, &kmers_on_graph, &seq_length, &node_ref, &mut kmers_hashes);
-
-        assert_eq!(kmers_hashes.len(), kmers_pos_on_ref.len());
-
-        for positions_list in &mut kmers_pos_on_ref {
-            //println!("Unsorted positions: {:#?}", positions_list);
-            positions_list.dedup();
-            positions_list.par_sort_by(|x,y| match x.orient.cmp(&y.orient) {
-                Ordering::Equal => x.start.cmp(&y.start),
-                other => other,
-            });
-            //println!("Sorted positions: {:#?}", positions_list);
-        }
-
-        /*
-        for i in 0..kmers_hashes.len() {
-            println!("hash: {}, no.kmers: {:#?}", kmers_hashes.get(i).unwrap(), kmers_pos_on_ref.get(i).unwrap().len());
-        }
-         */
+        let mut kmers_start_offsets : Vec<u64> = Vec::new();
+        let mut kmers_pos_on_ref : Vec<KmerPos> =
+            generate_pos_on_ref_2(&graph, &kmers_on_graph, &seq_length, &node_ref,
+                                  &mut kmers_hashes, &mut kmers_start_offsets);
 
         serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
         serialize_object_to_file(&kmers_pos_on_ref, out_prefix.clone() + ".kpos").ok();
@@ -166,7 +147,7 @@ impl Index {
         // the keys to be known in advance). This however allows for false positives,
         // which will be handled in the clustering phase.
         let kmers_table =
-            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_pos_on_ref.clone());
+            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_start_offsets.clone());
         serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx").ok();
 
         // Generate additional metadata, that will be used when rebuilding the index
@@ -214,7 +195,7 @@ impl Index {
         let kmer_positions_on_ref: Vec<KmerPos> =
             deserialize_object_from_file(out_prefix.clone() + ".kpos");
 
-        let kmers_table: NoKeyBoomHashMap<u64,Vec<KmerPos>> =
+        let kmers_table: NoKeyBoomHashMap<u64,u64> =
             deserialize_object_from_file(out_prefix.clone() + ".bbx");
 
         let meta : Metadata = deserialize_object_from_file(out_prefix.to_string() + ".mtd");

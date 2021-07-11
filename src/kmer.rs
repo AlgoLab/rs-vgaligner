@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{min, Ordering};
 use std::collections::VecDeque;
 
 use ahash::CallHasher;
@@ -15,6 +15,7 @@ use substring::Substring;
 use crate::serialization::SerializableHandle;
 use crate::utils::NodeRef;
 use std::ops::Index;
+use rayon::prelude::ParallelSliceMut;
 
 /// Represents a kmer in the graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -535,8 +536,9 @@ pub fn generate_pos_on_ref_2(
     kmers_on_graph: &Vec<Kmer>,
     seq_length: &u64,
     node_ref: &Vec<NodeRef>,
-    hashes: &mut Vec<u64>
-) -> Vec<Vec<KmerPos>> {
+    hashes: &mut Vec<u64>,
+    kmers_start_offsets: &mut Vec<u64>,
+) -> Vec<KmerPos> {
     let mut kmers_on_ref: Vec<Vec<KmerPos>> = Vec::new();
 
     // Hash builder to generate hashes
@@ -599,7 +601,40 @@ pub fn generate_pos_on_ref_2(
 
     }
 
-    kmers_on_ref
+    // sort and dedup each kmer's positions
+    for positions_list in &mut kmers_on_ref {
+        //println!("Unsorted positions: {:#?}", positions_list);
+        positions_list.dedup();
+        positions_list.par_sort_by(|x,y| match x.orient.cmp(&y.orient) {
+            Ordering::Equal => x.start.cmp(&y.start),
+            other => other,
+        });
+        //println!("Sorted positions: {:#?}", positions_list);
+    }
+    println!("Kmers on ref non flattened: {:#?}", kmers_on_ref);
+
+    // flatten kmer_pos_on_ref and store offsets.
+    // Instead of having separate vecs for each kmers
+    // (e.g. [kmer1 : [pos11, pos12, ... pos1n], kmer2 : [pos21, pos22, ... pos2m] ... ])
+    // obtain a single list, but also store where each kmer starts
+    // (e.g. [pos11, pos12, ... pos1n, pos21, pos22, ... pos2m ...] <- kmers positions
+    // and [0, n ...] <- offset where each kmer start)
+    // this is coherent with the original C++ implementation
+
+    let mut kmers_on_ref_flattened : Vec<KmerPos> = Vec::new();
+    let mut offset : u64 = 0;
+
+    for positions_list in kmers_on_ref {
+        kmers_start_offsets.push(offset);
+        for position in positions_list {
+            kmers_on_ref_flattened.push(position);
+            offset += 1;
+        }
+    }
+    println!("Kmers on ref flattened: {:#?}", kmers_on_ref_flattened);
+    println!("Kmers start offset: {:#?}", kmers_start_offsets);
+
+    kmers_on_ref_flattened
 }
 
 /*
