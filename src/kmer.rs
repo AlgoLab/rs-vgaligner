@@ -18,7 +18,7 @@ use std::ops::Index;
 use rayon::prelude::ParallelSliceMut;
 
 /// Represents a kmer in the graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Kmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
@@ -33,17 +33,18 @@ pub struct Kmer {
     #[serde(with = "SerializableHandle")]
     pub(crate) last: Handle,
     /// The orientation of the handles
-    handle_orient: bool,
+    pub(crate) handle_orient: bool,
     /// The number of forks the kmer has been involved in
     forks: u64,
 }
 
-
+/*
 impl PartialEq for Kmer {
     fn eq(&self, other: &Self) -> bool {
         self.seq == other.seq
     }
 }
+ */
 
 impl Kmer {
     /// This function allows for a kmer to be extended, used when the
@@ -235,6 +236,8 @@ pub fn generate_kmers(
         }
     }
 
+    complete_kmers.dedup();
+
     complete_kmers
 }
 
@@ -254,7 +257,9 @@ pub fn generate_kmers_linearly(
     let reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
 
     // Merge the kmers obtained previously
-    let kmers = merge_kmers(forward_kmers, reverse_kmers);
+    let mut kmers = merge_kmers(forward_kmers, reverse_kmers);
+
+    kmers.dedup();
 
     kmers
 }
@@ -445,9 +450,9 @@ fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
     let mut kmers: Vec<Kmer> = kmers_fwd.clone();
 
     for kmer in kmers_rev {
-        if !kmers.contains(&kmer) {
+        //if !kmers.contains(&kmer) {
             kmers.push(kmer);
-        }
+        //}
     }
 
     kmers
@@ -601,17 +606,18 @@ pub fn generate_pos_on_ref_2(
 
     }
 
-    // sort and dedup each kmer's positions
+    // sort each kmer's positions
+    // (dedup not necessary since already done when generating graph kmers)
     for positions_list in &mut kmers_on_ref {
         //println!("Unsorted positions: {:#?}", positions_list);
-        positions_list.dedup();
+        //positions_list.dedup();
         positions_list.par_sort_by(|x,y| match x.orient.cmp(&y.orient) {
             Ordering::Equal => x.start.cmp(&y.start),
             other => other,
         });
         //println!("Sorted positions: {:#?}", positions_list);
     }
-    println!("Kmers on ref non flattened: {:#?}", kmers_on_ref);
+    //println!("Kmers on ref non flattened: {:#?}", kmers_on_ref);
 
     // flatten kmer_pos_on_ref and store offsets.
     // Instead of having separate vecs for each kmers
@@ -631,8 +637,8 @@ pub fn generate_pos_on_ref_2(
             offset += 1;
         }
     }
-    println!("Kmers on ref flattened: {:#?}", kmers_on_ref_flattened);
-    println!("Kmers start offset: {:#?}", kmers_start_offsets);
+    //println!("Kmers on ref flattened: {:#?}", kmers_on_ref_flattened);
+    //println!("Kmers start offset: {:#?}", kmers_start_offsets);
 
     kmers_on_ref_flattened
 }
@@ -669,16 +675,10 @@ fn generate_pos_on_forward(
 }
  */
 
+/*
 /// Generate the hashes of the sequence encoded in each kmer
-pub fn generate_hash(kmers_on_graph: &Vec<Kmer>, hash_builder: &RandomState) -> Vec<u64> {
-    let mut hashes: Vec<u64> = Vec::new();
-
-    kmers_on_graph.iter().for_each(|kmer| {
-        hashes.push(u64::get_hash(&kmer.seq, hash_builder));
-    });
-
-    // This may break how the table is built
-    //hashes.sort();
-
-    hashes
+pub fn generate_hash(kmer: &Kmer) -> u64 {
+    let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
+    u64::get_hash(&kmer.seq, &hash_builder)
 }
+ */

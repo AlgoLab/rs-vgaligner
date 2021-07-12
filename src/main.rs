@@ -22,7 +22,7 @@ fn main() {
     match matches.subcommand_name() {
         Some("index") => subcommands::index_main::index_main(&matches),
         Some("map") => subcommands::map_main::map_main(&matches),
-        _ => panic!("Missing subcommand"),
+        _ => println!("Missing subcommand, please add [index|map]"),
     }
 
 }
