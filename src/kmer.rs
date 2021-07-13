@@ -14,7 +14,7 @@ use substring::Substring;
 
 use crate::serialization::SerializableHandle;
 use crate::utils::NodeRef;
-use std::ops::Index;
+use std::ops::{Index, Deref};
 use rayon::prelude::ParallelSliceMut;
 
 /// Represents a kmer in the graph
@@ -23,9 +23,9 @@ pub struct Kmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
     /// The start position relative to the handle
-    begin: u64,
+    pub(crate) begin: u64,
     /// The end position relative to the handle
-    end: u64,
+    pub(crate) end: u64,
     /// The first handle of the kmer
     #[serde(with = "SerializableHandle")]
     pub(crate) first: Handle,
@@ -35,7 +35,7 @@ pub struct Kmer {
     /// The orientation of the handles
     pub(crate) handle_orient: bool,
     /// The number of forks the kmer has been involved in
-    forks: u64,
+    pub(crate) forks: u64,
 }
 
 /*
@@ -236,6 +236,12 @@ pub fn generate_kmers(
         }
     }
 
+    // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
+    // Note that the same kmer can appear in different places
+    // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
+    complete_kmers.par_sort_by(|x,y| x.seq.cmp(&y.seq));
+    // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
+    // on consecutive duplicates, so only by sorting beforehand it works correctly.
     complete_kmers.dedup();
 
     complete_kmers
@@ -253,12 +259,18 @@ pub fn generate_kmers_linearly(
     assert!(!graph.paths.is_empty());
 
     // This requires two iterations, one on the forward (handles) and one on the reverse (handles).
-    let forward_kmers = generate_kmers_linearly_forward(graph, k, edge_max, degree_max);
-    let reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
+    let mut forward_kmers = generate_kmers_linearly_forward(graph, k, edge_max, degree_max);
+    let mut reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
 
     // Merge the kmers obtained previously
     let mut kmers = merge_kmers(forward_kmers, reverse_kmers);
 
+    // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
+    // Note that the same kmer can appear in different places
+    // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
+    kmers.par_sort_by(|x,y| x.seq.cmp(&y.seq));
+    // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
+    // on consecutive duplicates, so only by sorting beforehand it works correctly.
     kmers.dedup();
 
     kmers
@@ -547,7 +559,7 @@ pub fn generate_pos_on_ref_2(
     let mut kmers_on_ref: Vec<Vec<KmerPos>> = Vec::new();
 
     // Hash builder to generate hashes
-    let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
+    //let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
     let mut last_kmer: Option<String> = None;
     let mut curr_kmer_positions : Vec<KmerPos> = Vec::new();
 
@@ -590,9 +602,11 @@ pub fn generate_pos_on_ref_2(
                 // If the kmer has changed, push the hash of the previous one and the
                 // list of positions
                 if last_kmer != kmer.seq {
-                    let kmer_hash  = u64::get_hash(&kmer.seq, &hash_builder);
+                    let kmer_hash  = generate_hash(&last_kmer);
                     hashes.push(kmer_hash);
+
                     kmers_on_ref.push(curr_kmer_positions.clone());
+
                     curr_kmer_positions = Vec::new();
                     curr_kmer_positions.push(pos);
                     Some(kmer.clone().seq)
@@ -603,6 +617,12 @@ pub fn generate_pos_on_ref_2(
                 }
             }
         };
+
+        if kmer == kmers_on_graph.last().unwrap() {
+            let kmer_hash  = generate_hash(&kmer.seq);
+            hashes.push(kmer_hash);
+            kmers_on_ref.push(curr_kmer_positions.clone());
+        }
 
     }
 
@@ -675,10 +695,9 @@ fn generate_pos_on_forward(
 }
  */
 
-/*
+
 /// Generate the hashes of the sequence encoded in each kmer
-pub fn generate_hash(kmer: &Kmer) -> u64 {
+pub fn generate_hash(seq: &String) -> u64 {
     let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
-    u64::get_hash(&kmer.seq, &hash_builder)
+    u64::get_hash(&seq, &hash_builder)
 }
- */
