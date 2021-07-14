@@ -1,132 +1,80 @@
-
-/*
+use std::io::{Result, BufReader};
+use std::io::prelude::*;
 use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
-use bv::BitVec;
-use crate::kmer::{Kmer, KmerPos};
+use bstr::io::BufReadExt;
+use substring::Substring;
+use std::path::Path;
+use std::ffi::OsStr;
+use itertools::Itertools;
+use rayon::prelude::*;
+use std::io;
 
-/// This function prints kmers data
-pub fn print_kmers(kmers_on_graph: &Vec<Kmer>, kmers_on_seq_fwd: &Vec<KmerPos>) {
-    for i in 0..kmers_on_graph.len() {
-        let graph_kmer = kmers_on_graph.get(i).unwrap();
-        let fwd_kmer = kmers_on_seq_fwd.get(i).unwrap();
-
-        println!(
-            "Seq: {},\nStart_fwd: {},\nEnd_fwd: {},\nHandles: {:#?}\n",
-            graph_kmer.seq, fwd_kmer.start, fwd_kmer.end, graph_kmer.first
-        );
-    }
+#[derive(PartialEq)]
+enum InputFileTypes {
+    Fasta,
+    Fastq
 }
 
-/// This function prints the bitvector
-pub fn print_bitvec(bv: &BitVec) {
-    for i in 0..bv.len() {
-        let bit = bv.get(i);
-        match bit {
-            true => print!("1"),
-            false => print!("0"),
+pub struct InputSequence {
+    name : String,
+    seq : String
+}
+
+/// Parse a fasta/fastq file and returns the list of sequences from the given file
+pub fn read_seqs_from_file(filename : &str) -> Result<Vec<InputSequence>> {
+    let mut seqs : Vec<InputSequence> = Vec::new();
+
+    let mut file = File::open(filename)?;
+    let mut lines = BufReader::new(file).lines().peekable();
+
+    // Check file type
+    let file_type : InputFileTypes;
+    let file_extension = Path::new(filename).extension().and_then(OsStr::to_str);
+    match file_extension {
+        Some("fasta") | Some("fa") => file_type = InputFileTypes::Fasta,
+        Some("fastq") | Some("fq") => file_type = InputFileTypes::Fastq,
+        _ => panic!("Unrecognized file type")
+    }
+
+    // Then parse the file itself
+    if file_type == InputFileTypes::Fasta {
+        while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
+                let name: String = String::from(
+                    name_long.substring(1, name_long.len())
+                );
+                seqs.push(InputSequence { name, seq });
+        }
+    } else if file_type == InputFileTypes::Fastq {
+        while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
+        (lines.next(), lines.next(), lines.next(), lines.next()) {
+                seqs.push(InputSequence { name, seq });
         }
     }
+
+    Ok(seqs)
 }
 
-pub fn print_seq_to_file(seq: &str, path: &PathBuf) {
-    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
-    file.write_all(">ref\n".as_bytes());
-    file.write_all(seq.as_bytes());
-}
+#[cfg(test)]
+mod test {
+    use crate::io::read_seqs_from_file;
 
-pub fn print_kmers_to_file(kmers: &Vec<Kmer>, path: &PathBuf) {
-    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
-    for i in 0..kmers.len() {
-        let curr_kmer = kmers.get(i).unwrap();
-        let index_str = format!(">kmer-{}\n", i);
-        let kmers_str = format!("{}\n", curr_kmer.seq);
-        file.write_all(index_str.as_bytes());
-        file.write_all(kmers_str.as_bytes());
+    #[test]
+    fn test_read_fasta() {
+        let test_seqs = read_seqs_from_file("./test/test.fa").unwrap();
+        assert_eq!(test_seqs.len(), 10);
     }
-}
 
-pub fn print_kmers_to_file_split(
-    kmers_on_fwd: &Vec<Kmer>,
-    kmers_on_rev: &Vec<Kmer>,
-    path: &PathBuf,
-) {
-    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
-    for i in 0..kmers_on_fwd.len() {
-        let curr_kmer = kmers_on_fwd.get(i).unwrap();
-        let index_str = format!(">kmer-fwd-{}\n", i);
-        let kmers_str = format!("{}\n", curr_kmer.seq);
-        file.write_all(index_str.as_bytes());
-        file.write_all(kmers_str.as_bytes());
+    #[test]
+    fn test_read_fastq() {
+        let test_seqs = read_seqs_from_file("./test/test.fq").unwrap();
+        assert_eq!(test_seqs.len(), 1);
     }
-    for i in 0..kmers_on_rev.len() {
-        let curr_kmer = kmers_on_rev.get(i).unwrap();
-        let index_str = format!(">kmer-rev-{}\n", i);
-        let kmers_str = format!("{}\n", curr_kmer.seq);
-        file.write_all(index_str.as_bytes());
-        file.write_all(kmers_str.as_bytes());
+
+    /*
+    #[test]
+    fn test_wrong_extension() {
+        let test_seqs = read_seqs_from_file("./test/test.gfa").unwrap();
+        println!("Test: {:#?}", test_seqs);
     }
+     */
 }
-
-pub fn verify_kmers(seq: &str, kmers: &Vec<Kmer>, path: &PathBuf) {
-    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
-
-    // This string will be used as reference to write the kmers in a way that makes sense
-    let null_string = (0..seq.len()).map(|_| "-").collect::<String>();
-
-    // Print reference to file
-    let reference = format!("ref:       {}\n", seq);
-    file.write_all(reference.as_bytes());
-
-    // Print kmers to file
-    let mut last_seq: usize = 0;
-    let mut curr_kmer = kmers.get(last_seq).unwrap();
-    for i in 0..seq.len() - 3 {
-        if seq[i..i + 3] == curr_kmer.seq {
-            let mut curr_string = null_string.clone();
-            curr_string.replace_range(i..i + 3, curr_kmer.seq.as_str());
-
-            let kmer_string = format!("kmer:      {}\n", curr_string);
-            file.write_all(kmer_string.as_bytes());
-
-            last_seq += 1;
-            if last_seq < kmers.len() {
-                curr_kmer = kmers.get(last_seq).unwrap();
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-pub fn verify_kmers_2(seq: &str, kmers: &Vec<Kmer>, kmer_pos: &Vec<KmerPos>, path: &PathBuf) {
-    let mut file = File::create(path).unwrap_or_else(|_| panic!("Error creating file {:?}", path));
-
-    // This string will be used as reference to write the kmers in a way that makes sense
-    let null_string = (0..seq.len()).map(|_| "-").collect::<String>();
-
-    // Print reference to file
-    let reference = format!("ref:       {}\n", seq);
-    file.write_all(reference.as_bytes());
-
-    for i in 0..kmers.len() {
-        let curr_kmer = kmers.get(i).unwrap();
-        let curr_pos = kmer_pos.get(i).unwrap();
-        let mut curr_string = null_string.clone();
-
-        curr_string.replace_range(
-            curr_pos.start as usize..curr_pos.end as usize,
-            curr_kmer.seq.as_str(),
-        );
-        let kmer_string = format!("kmer:      {}\n", curr_string);
-        file.write_all(kmer_string.as_bytes());
-    }
-}
-
-pub fn store_object_to_file(serialized_object: &[u8], file_name: &String) -> std::io::Result<()> {
-    let mut file = File::create(file_name)?;
-    file.write_all(serialized_object)?;
-    Ok(())
-}
- */
