@@ -16,8 +16,23 @@ enum InputFileTypes {
 }
 
 pub struct InputSequence {
-    name : String,
-    seq : String
+    pub name : String,
+    pub seq : String
+}
+
+impl InputSequence {
+    pub fn split_into_kmers(&self, kmer_size : usize) -> Vec<String> {
+        let mut seq_kmers : Vec<String> = Vec::new();
+
+        let query_string = String::from(self.seq.clone());
+        let mut query_kmers : Vec<String> = Vec::new();
+        for i in 0..(self.seq.len() - kmer_size)  {
+            query_kmers.push(query_string.substring(i,i+kmer_size).into())
+        }
+        println!("Query kmers: {:#?}", seq_kmers);
+
+        seq_kmers
+    }
 }
 
 /// Parse a fasta/fastq file and returns the list of sequences from the given file

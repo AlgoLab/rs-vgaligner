@@ -14,7 +14,6 @@ pub mod io;
 pub mod kmer;
 mod serialization;
 pub mod utils;
-mod mapper;
 
 fn main() {
     let yaml = load_yaml!("./subcommands/cli.yml");

@@ -16,7 +16,7 @@ use std::error::Error;
 #[derive(Debug)]
 pub struct Index {
     // the kmer size that this graph was built on
-    kmer_length: u64,
+    pub kmer_length: u64,
     // consider only kmers where to_key(kmer) % sampling_mod == 0
     //sampling_length: u64,
 
@@ -294,6 +294,24 @@ impl Index {
                 }
             }
         }
+
+    }
+
+    pub fn find_positions_for_query_kmer(&self, kmer : &str) -> Vec<KmerPos> {
+
+        let mut kmer_positions_on_ref : Vec<KmerPos> = Vec::new();
+
+        let starting_pos = self.find_start_position_in_index(kmer).unwrap();
+        let ending_pos = self.find_end_position_in_index(kmer).unwrap();
+        let mut offset : usize = 0;
+
+        while starting_pos + offset < ending_pos {
+            let ref_pos : &KmerPos = self.kmer_pos_table.get(starting_pos + offset).unwrap();
+            kmer_positions_on_ref.push(ref_pos.clone());
+            offset += 1;
+        }
+
+        kmer_positions_on_ref
 
     }
 
@@ -669,7 +687,7 @@ mod test {
             println!("Start: {}, End: {}", starting_pos, ending_pos);
 
             loop {
-                let ref_pos : &KmerPos = kmers_positions_on_ref.get(starting_pos).unwrap();
+                let ref_pos : &KmerPos = kmers_positions_on_ref.get(starting_pos + offset).unwrap();
 
                 let ref_sequence : String;
                 if ref_pos.orient == true {
