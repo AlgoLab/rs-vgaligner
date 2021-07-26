@@ -5,15 +5,13 @@ use handlegraph::hashgraph::HashGraph;
 use handlegraph::handle::Edge;
 use handlegraph::handlegraph::HandleGraph;
 use crate::dna::reverse_complement;
-use crate::kmer::{
-    generate_kmers, generate_kmers_linearly,
-    generate_pos_on_ref, generate_pos_on_ref_2, Kmer, KmerPos,
-};
+use crate::kmer::{generate_kmers, generate_kmers_linearly, generate_pos_on_ref, generate_pos_on_ref_2, Kmer, KmerPos, generate_hash};
 use crate::serialization::{serialize_object_to_file, deserialize_object_from_file};
 use crate::utils::{find_graph_seq_length, find_forward_sequence, NodeRef};
 use serde::{Deserialize, Serialize};
 use rayon::prelude::ParallelSliceMut;
 use std::cmp::Ordering;
+use std::error::Error;
 
 #[derive(Debug)]
 pub struct Index {
@@ -243,6 +241,63 @@ impl Index {
             loaded: true,
         }
     }
+
+    // Find the starting position of a certain kmer in the index (or rather in kmer_pos_table)
+    pub fn find_start_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
+        match self.loaded {
+            false => Err("Index not built yet!"),
+            true => {
+
+                if seq.len() != self.kmer_length as usize {
+                    return Err("Wrong seq length, has different size from kmers")
+                }
+
+                let hash = generate_hash(&seq.to_string());
+
+                match self.bhpf.get(&hash) {
+                    Some(value) => {
+                        Ok(*value as usize)
+                    },
+                    _ => {
+                        Err("Kmer not in index")
+                    }
+                }
+
+            }
+        }
+
+    }
+
+    // Find the ending position of a certain kmer in the index (or rather in kmer_pos_table)
+    pub fn find_end_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
+        match self.loaded {
+            false => Err("Index not built yet!"),
+            true => {
+                match self.find_start_position_in_index(seq) {
+                    Ok(start_pos) => {
+
+                        // Begin at the starting pos
+                        let mut offset : usize = 0;
+                        let mut kpos : &KmerPos = self.kmer_pos_table.get(start_pos+offset).unwrap();
+
+                        // Step one at a time until the end is found
+                        while (kpos.start != u64::max_value() && kpos.end != u64::max_value()) {
+                            offset = offset + 1;
+                            kpos = self.kmer_pos_table.get(start_pos+offset).unwrap();
+                        }
+
+                        assert!(offset >= 1);
+
+                        Ok(start_pos+offset)
+                    }
+                    Err(msg) => Err(msg)
+                }
+            }
+        }
+
+    }
+
+
 }
 
 
@@ -319,18 +374,12 @@ mod test {
         let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
 
         let kmers_graph = generate_kmers(&graph, 3, Some(100), Some(100));
-        let kmers_ref = generate_pos_on_ref(&graph, &kmers_graph, &total_length, &node_ref);
 
-        assert_eq!(kmers_graph.len(), kmers_ref.len());
+        let mut kmers_hashes : Vec<u64> = Vec::new();
+        let mut kmers_start_offsets : Vec<u64> = Vec::new();
+        let kmers_ref = generate_pos_on_ref_2(&graph, &kmers_graph, &total_length, &node_ref, &mut kmers_hashes, &mut kmers_start_offsets);
 
-        for i in 0..kmers_graph.len() {
-            let graph_kmer = kmers_graph.get(i).unwrap();
-            let ref_kmer = kmers_ref.get(i).unwrap();
-
-            println!("{:#?}", graph_kmer);
-            println!("{:#?}", ref_kmer);
-            println!();
-        }
+        assert!(kmers_graph.len() < kmers_ref.len());
     }
 
     #[test]
@@ -561,14 +610,23 @@ mod test {
     fn test_table() {
         let graph = create_simple_graph();
 
+        let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
+        //let mut graph_edges: Vec<Edge> = graph.edges_par().collect();
+        graph_edges.par_sort();
+
+        // Get the number of nodes in the graph
+        let number_nodes = graph.graph.len() as u64;
+
         let seq_length = find_graph_seq_length(&graph);
 
-        // Generate the forward
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
-        let reverse = reverse_complement(&forward);
+        let seq_fwd = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let seq_rev = reverse_complement(&seq_fwd);
+
+        let seq_fwd2 = seq_fwd.clone();
+        let seq_rev2 = seq_rev.clone();
 
         let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
@@ -581,43 +639,66 @@ mod test {
         let kmers_mphf =
             NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_start_offsets.clone());
 
+        let test_index = Index {
+            kmer_length: 3,
+            //sampling_length: 0,
+            seq_length,
+            seq_fwd: seq_fwd2,
+            seq_rev: seq_rev2,
+            seq_bv,
+            //seq_by_rank: Default::default(),
+            n_edges: graph_edges.len() as u64,
+            edges: graph_edges,
+            n_nodes: number_nodes,
+            node_ref,
+            n_kmers: kmers_hashes.len() as u64,
+            n_kmer_pos: kmers_positions_on_ref.len() as u64,
+            bhpf: kmers_mphf,
+            kmer_pos_ref: kmers_hashes,
+            kmer_pos_table: kmers_positions_on_ref.clone(),
+            loaded: true,
+        };
+
         // Check that the hash -> start_offset mapping makes sense
         for kmer in &kmers_on_graph {
-            println!("Kmer: {:#?}", kmer);
-            let hash = generate_hash(&kmer.seq);
 
-            let start_pos : &u64;
-            match kmers_mphf.get(&hash) {
-                Some(value) => {
-                    println!("Ok");
-                    start_pos = value;
-                },
-                _ => {
-                    println!("Not ok");
-                    continue;
+            let starting_pos = test_index.find_start_position_in_index(&kmer.seq).unwrap();
+            let ending_pos = test_index.find_end_position_in_index(&kmer.seq).unwrap();
+            let mut offset : usize = 0;
+
+            println!("Start: {}, End: {}", starting_pos, ending_pos);
+
+            loop {
+                let ref_pos : &KmerPos = kmers_positions_on_ref.get(starting_pos).unwrap();
+
+                let ref_sequence : String;
+                if ref_pos.orient == true {
+                    ref_sequence = seq_fwd.clone();
+                } else {
+                    ref_sequence = seq_rev.clone();
+                }
+
+                let ref_substring = ref_sequence.substring(ref_pos.start as usize,
+                                                           ref_pos.end as usize);
+
+                // The kmer can either be the exact substring, or a "border" of the substring
+                // Since k=3, I will only make sure that at least the first and the last base are equal
+                //assert_eq!(kmer.seq, ref_substring); <- not guaranteed
+
+                println!("Kmer: {}", kmer.seq);
+                println!("Ref: {}\n", ref_substring);
+
+                assert_eq!(kmer.seq.chars().nth(0), ref_substring.chars().nth(0));
+                assert_eq!(kmer.seq.chars().nth(2), ref_substring.chars().nth(ref_substring.len()-1));
+
+                if starting_pos + offset == ending_pos {
+                    break
+                } else {
+                    offset = offset + 1;
                 }
             }
-            let ref_pos : &KmerPos = kmers_positions_on_ref.get(*start_pos as usize).unwrap();
 
-            let ref_sequence : String;
-            if ref_pos.orient == true {
-                ref_sequence = forward.clone();
-            } else {
-                ref_sequence = reverse.clone();
-            }
 
-            let ref_substring = ref_sequence.substring(ref_pos.start as usize,
-                                   ref_pos.end as usize);
-
-            // The kmer can either be the exact substring, or a "border" of the substring
-            // Since k=3, I will only make sure that at least the first and the last base are equal
-            //assert_eq!(kmer.seq, ref_substring); <- not guaranteed
-
-            println!("Kmer: {}", kmer.seq);
-            println!("Ref: {}", ref_substring);
-
-            assert_eq!(kmer.seq.chars().nth(0), ref_substring.chars().nth(0));
-            assert_eq!(kmer.seq.chars().nth(2), ref_substring.chars().nth(ref_substring.len()-1));
         }
     }
 

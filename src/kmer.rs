@@ -605,8 +605,10 @@ pub fn generate_pos_on_ref_2(
                     let kmer_hash  = generate_hash(&last_kmer);
                     hashes.push(kmer_hash);
 
+                    // Push the positions of the current kmer
                     kmers_on_ref.push(curr_kmer_positions.clone());
 
+                    // Start with new value
                     curr_kmer_positions = Vec::new();
                     curr_kmer_positions.push(pos);
                     Some(kmer.clone().seq)
@@ -656,6 +658,16 @@ pub fn generate_pos_on_ref_2(
             kmers_on_ref_flattened.push(position);
             offset += 1;
         }
+
+        // Add end delimiter, this is needed because
+        // we only store the starting positions as offsets
+        let delimiter = KmerPos {
+            start: u64::max_value(),
+            end: u64::max_value(),
+            orient: false  //Doesn't really matter, will only check max_value
+        };
+        kmers_on_ref_flattened.push(delimiter);
+        offset += 1;
     }
     //println!("Kmers on ref flattened: {:#?}", kmers_on_ref_flattened);
     //println!("Kmers start offset: {:#?}", kmers_start_offsets);
