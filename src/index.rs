@@ -286,7 +286,9 @@ impl Index {
                             kpos = self.kmer_pos_table.get(start_pos+offset).unwrap();
                         }
 
-                        assert!(offset >= 1);
+                        // Discard delimiter, so that only the actual positions
+                        // are returned
+                        offset = offset - 1;
 
                         Ok(start_pos+offset)
                     }
@@ -305,7 +307,7 @@ impl Index {
         let ending_pos = self.find_end_position_in_index(kmer).unwrap();
         let mut offset : usize = 0;
 
-        while starting_pos + offset < ending_pos {
+        while starting_pos + offset <= ending_pos {
             let ref_pos : &KmerPos = self.kmer_pos_table.get(starting_pos + offset).unwrap();
             kmer_positions_on_ref.push(ref_pos.clone());
             offset += 1;
