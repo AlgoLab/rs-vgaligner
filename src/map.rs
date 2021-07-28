@@ -61,3 +61,43 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>) {
     }
 
 }
+
+#[cfg(test)]
+mod test {
+    use handlegraph::hashgraph::HashGraph;
+    use handlegraph::mutablehandlegraph::MutableHandleGraph;
+    use handlegraph::handle::Edge;
+    use handlegraph::pathgraph::PathHandleGraph;
+
+    /// This function creates a simple graph, used for debugging
+    ///        | 2: CT \
+    /// 1:  A            4: GCA
+    ///        \ 3: GA |
+    fn create_simple_graph() -> HashGraph {
+        let mut graph: HashGraph = HashGraph::new();
+
+        let h1 = graph.create_handle("A".as_bytes(), 1);
+        let h2 = graph.create_handle("CT".as_bytes(), 2);
+        let h3 = graph.create_handle("GA".as_bytes(), 3);
+        let h4 = graph.create_handle("GCA".as_bytes(), 4);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+
+        let p1 = graph.create_path_handle("P1".as_bytes(), false);
+        graph.append_step(&p1, h1);
+        graph.append_step(&p1, h2);
+        graph.append_step(&p1, h4);
+
+        let p2 = graph.create_path_handle("P2".as_bytes(), false);
+        graph.append_step(&p2, h1);
+        graph.append_step(&p2, h3);
+        graph.append_step(&p2, h4);
+
+        graph
+    }
+
+
+}

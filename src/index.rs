@@ -80,7 +80,7 @@ impl Index {
         max_furcations: u64,
         max_degree: u64,
         _sampling_rate: f32,
-        out_prefix: String,
+        out_prefix: Option<String>,
     ) -> Self {
         // Get the number of nodes in the graph
         let number_nodes = graph.graph.len() as u64;
@@ -102,11 +102,6 @@ impl Index {
         // Get the forward and reverse encoded by the linearized graph
         let seq_fwd = find_forward_sequence(graph, &mut seq_bv, &mut node_ref);
         let seq_rev = reverse_complement(&seq_fwd.as_str());
-
-        serialize_object_to_file(&seq_fwd, out_prefix.clone() + ".sqf").ok();
-        serialize_object_to_file(&seq_rev, out_prefix.clone() + ".sqr").ok();
-        serialize_object_to_file(&node_ref, out_prefix.clone() + ".gyn").ok();
-        serialize_object_to_file(&seq_bv, out_prefix.clone() + ".sbv").ok();
 
         // Generate the kmers from the graph, and obtain graph-based positions.
         // Note that the resulting kmers will be already sorted according to their seq
@@ -134,8 +129,6 @@ impl Index {
             ),
         };
 
-        serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
-
         // Translate the kmers positions on the graph (obtained by the previous function)
         // into positions on the linearized forward or reverse sequence, according to which
         // strand each kmer was on.
@@ -150,13 +143,10 @@ impl Index {
             generate_pos_on_ref_2(&graph, &kmers_on_graph, &seq_length, &node_ref,
                                   &mut kmers_hashes, &mut kmers_start_offsets);
 
-        // TODO: add end marker between different kmers in kmers_pos_on_ref? Currently
-        // it seems like looking at the next offset should be enough
-
         assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
-
-        serialize_object_to_file(&kmers_hashes, out_prefix.clone() + ".kset").ok();
-        serialize_object_to_file(&kmers_pos_on_ref, out_prefix.clone() + ".kpos").ok();
+        println!("Kmer hashes length: {}", kmers_hashes.len());
+        println!("Kmer hashes: {:#?}", kmers_hashes);
+        println!("Kmer start offsets: {:#?}", kmers_start_offsets);
 
         // Generate a table which stores the kmers' starting offsets in a memory-efficient way,
         // as keys aren't actually stored (this is done by using a minimal perfect hash function,
@@ -168,22 +158,9 @@ impl Index {
         // - check all the positions in kmers_pos_on_ref until the next kmer starts
         let kmers_table =
             NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_start_offsets.clone());
-        serialize_object_to_file(&kmers_table, out_prefix.clone() + ".bbx").ok();
 
-        // Generate additional metadata, that will be used when rebuilding the index
-        let meta = Metadata {
-            seq_length,
-            kmer_length,
-            sampling_mod: _sampling_rate,
-            n_nodes: graph.node_count() as u64,
-            n_edges: graph.edge_count() as u64,
-            n_kmers: kmers_hashes.len() as u64,
-            n_kmer_positions: kmers_pos_on_ref.len() as u64
-        };
-        serialize_object_to_file(&meta, out_prefix.clone() + ".mtd").ok();
-
-        // Finally, return the index
-        Index {
+        // Obtain the index
+        let index = Index {
             kmer_length,
             //sampling_length: 0,
             seq_length,
@@ -201,7 +178,48 @@ impl Index {
             kmer_pos_ref: kmers_hashes,
             kmer_pos_table: kmers_pos_on_ref,
             loaded: false,
+        };
+
+        // Store the index as multiple files
+        if let Some(out_prefix) = out_prefix {
+
+            // Generate additional metadata, that will be used when rebuilding the index
+            let meta = Metadata {
+                seq_length,
+                kmer_length,
+                sampling_mod: _sampling_rate,
+                n_nodes: graph.node_count() as u64,
+                n_edges: graph.edge_count() as u64,
+                n_kmers: index.kmer_pos_ref.len() as u64,
+                n_kmer_positions: index.kmer_pos_table.len() as u64
+            };
+
+            match index.store_with_prefix(meta, out_prefix) {
+                Err(e) => panic!("{}",e),
+                _ => (),
+            }
+
         }
+
+        index
+    }
+
+    fn store_with_prefix(&self, meta : Metadata, out_prefix: String) -> std::io::Result<()> {
+        serialize_object_to_file(&self.seq_fwd, out_prefix.clone() + ".sqf")?;
+        serialize_object_to_file(&self.seq_rev, out_prefix.clone() + ".sqr")?;
+        serialize_object_to_file(&self.node_ref, out_prefix.clone() + ".gyn")?;
+        serialize_object_to_file(&self.seq_bv, out_prefix.clone() + ".sbv")?;
+
+        //serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
+
+        serialize_object_to_file(&self.kmer_pos_ref, out_prefix.clone() + ".kset")?;
+        serialize_object_to_file(&self.kmer_pos_table, out_prefix.clone() + ".kpos")?;
+
+        serialize_object_to_file(&self.bhpf, out_prefix.clone() + ".bbx")?;
+
+        serialize_object_to_file(&meta, out_prefix.clone() + ".mtd")?;
+
+        Ok(())
     }
 
     pub fn load_from_prefix(out_prefix: String) -> Self {
