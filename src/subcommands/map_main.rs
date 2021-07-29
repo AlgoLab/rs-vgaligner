@@ -54,5 +54,5 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     let query = read_seqs_from_file(&in_path_file).unwrap();
 
-    map_reads(&index, &query);
+    map_reads(&index, &query, 10, 0, max_gap_length);
 }
