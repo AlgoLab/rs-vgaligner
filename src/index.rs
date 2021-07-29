@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use rayon::prelude::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::error::Error;
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 #[derive(Debug)]
 pub struct Index {
@@ -120,8 +122,10 @@ impl Index {
             ),
 
             // Otherwise, use an optimized approach that works by exploring each path
-            // linearly
-            false => generate_kmers_linearly(
+            // linearly -- currently disabled as it's bugged
+            // TODO: fix this later, something is probably off with kmer equality
+            // false => generate_kmers_linearly
+            false => generate_kmers(
                 graph,
                 kmer_length as u64,
                 Some(max_furcations),
@@ -144,9 +148,13 @@ impl Index {
                                   &mut kmers_hashes, &mut kmers_start_offsets);
 
         assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
+
+        /*
         println!("Kmer hashes length: {}", kmers_hashes.len());
         println!("Kmer hashes: {:#?}", kmers_hashes);
-        println!("Kmer start offsets: {:#?}", kmers_start_offsets);
+        let mut new_hashes : HashSet<u64> = HashSet::from_iter(kmers_hashes.iter().cloned());
+        assert_eq!(kmers_hashes.len(), new_hashes.len());
+         */
 
         // Generate a table which stores the kmers' starting offsets in a memory-efficient way,
         // as keys aren't actually stored (this is done by using a minimal perfect hash function,
@@ -180,6 +188,8 @@ impl Index {
             loaded: false,
         };
 
+        println!("Index built correctly!");
+
         // Store the index as multiple files
         if let Some(out_prefix) = out_prefix {
 
@@ -196,7 +206,7 @@ impl Index {
 
             match index.store_with_prefix(meta, out_prefix) {
                 Err(e) => panic!("{}",e),
-                _ => (),
+                _ => println!("Index stored correctly!"),
             }
 
         }

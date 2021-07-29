@@ -41,7 +41,9 @@ pub struct Kmer {
 /*
 impl PartialEq for Kmer {
     fn eq(&self, other: &Self) -> bool {
-        self.seq == other.seq
+        self.seq == other.seq && self.begin == other.begin && self.end == other.end
+        && self.first == other.first && self.last == other.last &&
+        self.handle_orient == other.handle_orient
     }
 }
  */
