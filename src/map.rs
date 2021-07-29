@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::ops::Deref;
 
 #[derive(Clone)]
-struct Anchor {
+pub struct Anchor {
     pub query_begin : u64,
     pub query_end : u64,
     target_begin : u64,
@@ -56,7 +56,7 @@ fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<Anchor> {
     anchors
 }
 
-struct Chain {
+pub struct Chain {
     anchors : VecDeque<Anchor>,
     score : f64,
     mapping_quality : f64,
@@ -140,6 +140,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
     anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
 
     for i in 0..anchors.len() {
+
         let anchor_i = anchors.get_mut(i).unwrap();
         anchor_i.max_chain_score = seed_length as f64;
 
@@ -151,7 +152,9 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
         }
 
         for j in (i-1..min_j).rev() {
-            let anchor_j = anchors.get(j).unwrap();
+            let anchor_j = (*anchors.get(j).unwrap()).clone();
+            let mut anchor_i = anchors.get_mut(i).unwrap();
+
             let proposed_score = score_anchor(&anchor_j, anchor_i, &seed_length, &max_gap);
             
             if proposed_score > anchor_i.max_chain_score {
