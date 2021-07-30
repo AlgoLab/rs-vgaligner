@@ -5,6 +5,8 @@ use std::cmp::min;
 use itertools::Unique;
 use std::collections::VecDeque;
 use std::ops::Deref;
+use bio::data_structures::interval_tree::*;
+use core::cmp;
 
 #[derive(Clone)]
 pub struct Anchor {
@@ -90,6 +92,16 @@ impl Chain {
         assert!(self.anchors.len() > 0);
         self.anchors.back().unwrap().query_end
     }
+
+    pub fn compute_boundaries(&mut self, seed_length : u64, mismatch_rate : f64) {
+        let first_target_end = self.anchors.front().unwrap().target_end;
+        let last_target_begin = self.anchors.back().unwrap().target_begin;
+
+        let first_target_begin = self.anchors.front().unwrap().target_begin;
+        let last_target_end = self.anchors.back().unwrap().target_end;
+
+        // TODO : if/else that uses seq_pos_t
+    }
 }
 
 
@@ -134,15 +146,18 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
     score
 }
 
-pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, bandwidth : u64, max_gap : u64) -> Vec<Chain> {
+pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, bandwidth : u64,
+              max_gap : u64, chain_min_n_anchors : u64) -> Vec<Chain> {
 
     // First sort the anchors by their ending position
     anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
 
     for i in 0..anchors.len() {
 
-        let anchor_i = anchors.get_mut(i).unwrap();
-        anchor_i.max_chain_score = seed_length as f64;
+        {
+            let anchor_i = anchors.get_mut(i).unwrap();
+            anchor_i.max_chain_score = seed_length as f64;
+        }
 
         let mut min_j : usize = 0;
         if bandwidth > i as u64 {
@@ -160,26 +175,139 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
             if proposed_score > anchor_i.max_chain_score {
                 anchor_i.max_chain_score = proposed_score;
                 // TODO: review this
-                anchor_i.best_predecessor = Some(Box::new(anchor_j.clone()));
+                anchor_i.best_predecessor = Some(Box::new(anchor_j));
             }
         }
 
     }
 
-    let chains : Vec<Chain> = Vec::new();
-    let i = anchors.len() - 1;
+    let mut chains: Vec<Chain> = Vec::new();
+    let mut i = anchors.len() - 1;
     while i >= 0 {
-        let a = anchors.get(i).unwrap();
+        let mut a = anchors.get_mut(i).unwrap();
 
         if a.best_predecessor.is_none() && a.max_chain_score > seed_length as f64 {
             let mut curr_chain = Chain::new();
             curr_chain.anchors.push_back(a.clone());
+            curr_chain.score = a.max_chain_score;
+            loop {
+                let mut b = a.best_predecessor.unwrap();
+                curr_chain.anchors.push_back(*b);
+                a.best_predecessor = None;
+                a = Box::new(*a.clone());
+                if a.best_predecessor.is_none() {
+                    break;
+                }
+            }
+            if curr_chain.anchors.len() < chain_min_n_anchors as usize {
+                chains.pop();
+            } else {
+                //TODO: complete this
+            }
+        }
+
+        i -= 1;
+
+    }
+
+    // Sort the chains by score in reverse order (higher first)
+    chains.sort_by(|a,b| b.score.cmp(&a));
+
+    // TODO: IITree
+    let mut interval_tree : ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
+    for chain in chains {
+        let query_begin = chain.anchors.front().unwrap().query_begin;
+        let query_end = chain.anchors.back().unwrap().query_end;
+        interval_tree.insert((query_begin..query_end), chain.clone());
+    }
+    interval_tree.index();
+
+    for mut chain in chains {
+        if !chain.processed() {
+            let chain_begin = chain.anchors.front().unwrap().query_begin;
+            let chain_end = chain.anchors.back().unwrap().query_end;
+            let chain_length = chain_end - chain_begin;
+            let mut best_secondary: Chain = Chain::new();
+            let mut ovlp = interval_tree.find((chain_begin..chain_end));
+            for value in ovlp {
+                let mut other_chain = value.data();
+                if other_chain != chain && other_chain.score <= chain.score {
+                    let other_begin = value.interval().start;
+                    let other_end = value.interval().end;
+                    let other_length = other_end - other_begin;
+                    let ovlp_begin = cmp::max(chain_begin, other_begin);
+                    let ovlp_end = cmp::min(chain_end, other_end);
+                    let ovlp_length = ovlp_end - ovlp_begin;
+
+                    if (ovlp_length > other_length * secondary_chain_threshold) {
+                        other_chain.mapping_quality = 0;
+                        other_chain.is_secondary = true;
+                    }
+                    if best_secondary == None || best_secondary.score < other_chain.score {
+                        best_secondary = other_chain;
+                    }
+                }
+            }
+            if best_secondary == None {
+                // TODO: what's this?
+                //chain.mapping_quality = max_mapq;
+            } else {
+                chain.mapping_quality =
+                    40 * (1-best_secondary.score / chain.score)
+                        * cmp::min(1.0f64, chain.anchors.len()/10.0f64)
+                        * f64::log2(chain.score); // TODO: check log
+            }
         }
     }
 
-
+    for mut chain in chains {
+        chain.compute_boundaries(seed_length, mismatch_rate);
+    }
 
     chains
+}
+
+/*
+    GAF format
+    https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf
+
+    Col     Type    Description
+    1       string  Query sequence name
+    2       int     Query sequence length
+    3       int     Query start (0-based; closed)
+    4       int     Query end (0-based; open)
+    5       char    Strand relative to the path: "+" or "-"
+    6       string  Path matching /([><][^\s><]+(:\d+-\d+)?)+|([^\s><]+)/
+    7       int     Path length
+    8       int     Start position on the path (0-based)
+    9       int     End position on the path (0-based)
+    10      int     Number of residue matches
+    11      int     Alignment block length
+    12      int     Mapping quality (0-255; 255 for missing)
+*/
+pub fn write_chain_gaf(chain : &Chain, index : &Index,
+                       query_name : String, query_length : u64) -> String {
+
+    let query_begin = chain.anchors.front().unwrap().query_begin;
+    let query_end = chain.anchors.back().unwrap().query_end;
+    let first_half_gaf_line = format!("{}\t{}\t{}\t{}\t{}\t",
+                                      query_name,
+                                      query_length,
+                                      query_begin,
+                                      query_end,
+                                      "+");
+    let path_length: u64 = 0;
+    // TODO: continue this + needs fixes (original impl)
+    let second_half_gaf_line = format!("\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                                       path_length,
+                                       0,
+                                       path_length,
+                                       path_length,
+                                       path_length,
+                                       cmp::min(chain.mapping_quality as u64,254 as u64),
+                                       "ta:Z:chain");
+
+    format!("{}{}", first_half_gaf_line, second_half_gaf_line)
 }
 
 // TODO: add other params
@@ -189,7 +317,7 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>, seed_length : u64
         // First find the anchors, aka exact matches between
         // seqs and kmers in the index
         let mut anchors: Vec<Anchor> = anchors_for_query(index, seq);
-        let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length, seed_length, bandwidth, max_gap);
+        let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length, seed_length, bandwidth, max_gap, 100);
     }
 
 }
