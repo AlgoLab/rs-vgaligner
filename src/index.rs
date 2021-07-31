@@ -26,7 +26,7 @@ pub struct Index {
     // total sequence length of the graph
     seq_length: u64,
     // forward sequence of the graph, stored here for fast access during alignment
-    seq_fwd: String,
+    pub(crate) seq_fwd: String,
     // reverse complemented sequence of the graph, for fast access during alignment
     seq_rev: String,
     // mark node starts in forward
@@ -60,7 +60,7 @@ pub struct Index {
     // End of relevant part for index --------
 
     // if we're loaded, helps during teardown
-    loaded: bool,
+    pub(crate) loaded: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -271,74 +271,66 @@ impl Index {
     }
 
     // Find the starting position of a certain kmer in the index (or rather in kmer_pos_table)
-    pub fn find_start_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
-        match self.loaded {
-            false => Err("Index not built yet!"),
-            true => {
+    fn find_start_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
 
-                if seq.len() != self.kmer_length as usize {
-                    return Err("Wrong seq length, has different size from kmers")
-                }
+        if seq.len() != self.kmer_length as usize {
+            return Err("Wrong seq length, has different size from kmers")
+        }
 
-                let hash = generate_hash(&seq.to_string());
+        let hash = generate_hash(&seq.to_string());
 
-                match self.bhpf.get(&hash) {
-                    Some(value) => {
-                        Ok(*value as usize)
-                    },
-                    _ => {
-                        Err("Kmer not in index")
-                    }
-                }
-
+        match self.bhpf.get(&hash) {
+            Some(value) => {
+                Ok(*value as usize)
+            },
+            _ => {
+                Err("Kmer not in index")
             }
         }
 
     }
 
     // Find the ending position of a certain kmer in the index (or rather in kmer_pos_table)
-    pub fn find_end_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
-        match self.loaded {
-            false => Err("Index not built yet!"),
-            true => {
-                match self.find_start_position_in_index(seq) {
-                    Ok(start_pos) => {
+    fn find_end_position_in_index(&self, seq: &str, start_pos : usize) -> Result<usize, &'static str> {
+        // Begin at the starting pos
+        let mut offset : usize = 0;
+        let mut kpos : &KmerPos = self.kmer_pos_table.get(start_pos+offset).unwrap();
 
-                        // Begin at the starting pos
-                        let mut offset : usize = 0;
-                        let mut kpos : &KmerPos = self.kmer_pos_table.get(start_pos+offset).unwrap();
-
-                        // Step one at a time until the end is found
-                        while (kpos.start != u64::max_value() && kpos.end != u64::max_value()) {
-                            offset = offset + 1;
-                            kpos = self.kmer_pos_table.get(start_pos+offset).unwrap();
-                        }
-
-                        // Discard delimiter, so that only the actual positions
-                        // are returned
-                        offset = offset - 1;
-
-                        Ok(start_pos+offset)
-                    }
-                    Err(msg) => Err(msg)
-                }
-            }
+        // Step one at a time until the end is found
+        while kpos.start != u64::MAX && kpos.end != u64::MAX {
+            offset = offset + 1;
+            kpos = self.kmer_pos_table.get(start_pos+offset).unwrap();
         }
 
+        // Discard delimiter, so that only the actual positions
+        // are returned
+        offset = offset - 1;
+
+        Ok(start_pos+offset)
     }
 
     pub fn find_positions_for_query_kmer(&self, kmer : &str) -> Vec<KmerPos> {
 
         let mut kmer_positions_on_ref : Vec<KmerPos> = Vec::new();
 
-        let starting_pos = self.find_start_position_in_index(kmer).unwrap();
-        let ending_pos = self.find_end_position_in_index(kmer).unwrap();
-        let mut offset : usize = 0;
+        let starting_pos = match self.find_start_position_in_index(kmer) {
+            Ok(pos) => pos,
+            Err(_) => usize::MAX
+        };
 
-        while starting_pos + offset <= ending_pos {
-            let ref_pos : &KmerPos = self.kmer_pos_table.get(starting_pos + offset).unwrap();
-            kmer_positions_on_ref.push(ref_pos.clone());
-            offset += 1;
+        // Not the cleanest approach but will do for now... TODO?
+        // Checking if kmer is present first would require more time...
+
+        // Kmer is actually in the index
+        if starting_pos != usize::MAX {
+            let ending_pos = self.find_end_position_in_index(kmer, starting_pos).unwrap();
+            let mut offset : usize = 0;
+
+            while starting_pos + offset <= ending_pos {
+                let ref_pos : &KmerPos = self.kmer_pos_table.get(starting_pos + offset).unwrap();
+                kmer_positions_on_ref.push(ref_pos.clone());
+                offset += 1;
+            }
         }
 
         kmer_positions_on_ref
@@ -711,7 +703,7 @@ mod test {
         for kmer in &kmers_on_graph {
 
             let starting_pos = test_index.find_start_position_in_index(&kmer.seq).unwrap();
-            let ending_pos = test_index.find_end_position_in_index(&kmer.seq).unwrap();
+            let ending_pos = test_index.find_end_position_in_index(&kmer.seq, starting_pos).unwrap();
             let mut offset : usize = 0;
 
             println!("Start: {}, End: {}", starting_pos, ending_pos);

@@ -8,7 +8,7 @@ use std::ops::Deref;
 use bio::data_structures::interval_tree::*;
 use core::cmp;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Anchor {
     pub query_begin : u64,
     pub query_end : u64,
@@ -43,6 +43,9 @@ fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<Anchor> {
     for i in 0..query_kmers.len() {
         let kmer = query_kmers.get(i).unwrap();
         let ref_pos_vec = index.find_positions_for_query_kmer(&kmer.as_str());
+
+        //println!("Curr kmer: {}", kmer);
+        //println!("Positions on ref: {:#?}", ref_pos_vec);
 
         let mut anchors_for_kmer : Vec<Anchor> = Vec::new();
         for pos in ref_pos_vec {
@@ -146,8 +149,10 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
     score
 }
 
+/*
 pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, bandwidth : u64,
-              max_gap : u64, chain_min_n_anchors : u64) -> Vec<Chain> {
+              max_gap : u64, chain_min_n_anchors : u64, secondary_chain_threshold : u64,
+              mismatch_rate : u64) -> Vec<Chain> {
 
     // First sort the anchors by their ending position
     anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
@@ -266,6 +271,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
 
     chains
 }
+ */
 
 /*
     GAF format
@@ -317,7 +323,7 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>, seed_length : u64
         // First find the anchors, aka exact matches between
         // seqs and kmers in the index
         let mut anchors: Vec<Anchor> = anchors_for_query(index, seq);
-        let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length, seed_length, bandwidth, max_gap, 100);
+        //let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length, seed_length, bandwidth, max_gap, 100);
     }
 
 }
@@ -328,6 +334,9 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::handle::Edge;
     use handlegraph::pathgraph::PathHandleGraph;
+    use crate::index::Index;
+    use crate::io::InputSequence;
+    use crate::map::anchors_for_query;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
@@ -357,6 +366,41 @@ mod test {
         graph.append_step(&p2, h4);
 
         graph
+    }
+
+    #[test]
+    fn test_simple_anchors() {
+        let mut graph = HashGraph::new();
+        graph.create_handle("ACT".as_bytes(), 1);
+        let mut index = Index::build(&graph, 3, 100,
+                                     100, 7.0, None);
+        let query : String = String::from("ACT");
+        let input_seq = InputSequence::from_string(&query);
+        let anchors = anchors_for_query(&index, &input_seq);
+        assert_eq!(anchors.len(), 1);
+    }
+
+    #[test]
+    fn test_anchors() {
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100,
+                                     100, 7.0, None);
+        let input_seq = InputSequence::from_string(&String::from("ACTGCA"));
+        let anchors = anchors_for_query(&index, &input_seq);
+
+        // There are at least 4 3-mers in the query, there can be more because
+        // a kmer can appear in multiple positions
+        assert!(anchors.len() >= 4)
+    }
+
+    #[test]
+    fn test_no_anchors() {
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100,
+                                 100, 7.0, None);
+        let input_seq = InputSequence::from_string(&String::from("AAATTT"));
+        let anchors = anchors_for_query(&index, &input_seq);
+        assert_eq!(anchors.len(), 0)
     }
 
 

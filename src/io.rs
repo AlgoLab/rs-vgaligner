@@ -15,6 +15,7 @@ enum InputFileTypes {
     Fastq
 }
 
+#[derive(Debug)]
 pub struct InputSequence {
     pub name : String,
     pub seq : String
@@ -25,13 +26,21 @@ impl InputSequence {
         let mut seq_kmers : Vec<String> = Vec::new();
 
         let query_string = String::from(self.seq.clone());
-        let mut query_kmers : Vec<String> = Vec::new();
-        for i in 0..(self.seq.len() - kmer_size)  {
-            query_kmers.push(query_string.substring(i,i+kmer_size).into())
+        let end = self.seq.len() - kmer_size;
+        for i in 0..(self.seq.len() - kmer_size + 1)  {
+            seq_kmers.push(String::from(
+                                query_string.substring(i,i+kmer_size)));
         }
-        println!("Query kmers: {:#?}", seq_kmers);
+        //println!("Query kmers: {:#?}", seq_kmers);
 
         seq_kmers
+    }
+
+    pub fn from_string(seq : &String) -> Self{
+        InputSequence {
+            name : String::from(""),
+            seq : seq.clone()
+        }
     }
 }
 
