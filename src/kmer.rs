@@ -17,6 +17,11 @@ use crate::utils::NodeRef;
 use std::ops::{Index, Deref};
 use rayon::prelude::ParallelSliceMut;
 
+pub struct SeqPos {
+    orient : bool,
+    position : u64
+}
+
 /// Represents a kmer in the graph
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Kmer {
@@ -478,10 +483,13 @@ pub struct KmerPos {
     //seq : String,
     /// The start position of the kmer
     pub(crate) start: u64,
+    /// The orientation of the kmer
+    pub(crate) start_orient: bool,
     /// The end position of the kmer
     pub(crate) end: u64,
     /// The orientation of the kmer
-    pub(crate) orient: bool,
+    pub(crate) end_orient: bool,
+
 }
 
 /// Obtain the position of a given handle in the serialized forward/reverse
@@ -540,7 +548,8 @@ pub fn generate_pos_on_ref(
         let pos = KmerPos {
             start: start_ref,
             end: end_ref,
-            orient: kmer.handle_orient,
+            start_orient: !kmer.first.is_reverse(),
+            end_orient: !kmer.last.is_reverse()
         };
         kmers_on_ref.push(pos);
     }
@@ -591,7 +600,8 @@ pub fn generate_pos_on_ref_2(
         let pos = KmerPos {
             start: start_ref,
             end: end_ref,
-            orient: kmer.handle_orient,
+            start_orient: !kmer.first.is_reverse(),
+            end_orient: !kmer.last.is_reverse()
         };
 
         last_kmer = match last_kmer {
@@ -635,7 +645,7 @@ pub fn generate_pos_on_ref_2(
     for positions_list in &mut kmers_on_ref {
         //println!("Unsorted positions: {:#?}", positions_list);
         //positions_list.dedup();
-        positions_list.par_sort_by(|x,y| match x.orient.cmp(&y.orient) {
+        positions_list.par_sort_by(|x,y| match x.start_orient.cmp(&y.start_orient) {
             Ordering::Equal => x.start.cmp(&y.start),
             other => other,
         });
@@ -664,9 +674,10 @@ pub fn generate_pos_on_ref_2(
         // Add end delimiter, this is needed because
         // we only store the starting positions as offsets
         let delimiter = KmerPos {
-            start: u64::max_value(),
-            end: u64::max_value(),
-            orient: false  //Doesn't really matter, will only check max_value
+            start: u64::MAX,
+            end: u64::MAX,
+            start_orient: false, //Doesn't really matter, will only check max_value
+            end_orient: false  //Doesn't really matter, will only check max_value
         };
         kmers_on_ref_flattened.push(delimiter);
         offset += 1;
@@ -676,39 +687,6 @@ pub fn generate_pos_on_ref_2(
 
     kmers_on_ref_flattened
 }
-
-/*
-// Not used anymore, may still be useful
-fn generate_pos_on_forward(
-    kmers_on_graph: &Vec<Kmer>,
-    _forward: &String,
-    _seq_bw: &BitVec,
-    node_ref: &Vec<NodeRef>,
-) -> Vec<KmerPos> {
-    let mut kmers_on_fwd: Vec<KmerPos> = Vec::new();
-
-    for kmer in kmers_on_graph {
-        // -1 required because i-eth node id is i-1-eth in node list
-        let kmer_handle = kmer.first;
-        let kmer_node_id = kmer_handle.unpack_number() - 1;
-
-        let noderef_kmer: &NodeRef = node_ref.get(kmer_node_id as usize).unwrap();
-        let start_pos_on_fwd = noderef_kmer.seq_idx + kmer.begin;
-        let end_pos_on_fwd = noderef_kmer.seq_idx + kmer.end;
-
-        let curr_kmer: KmerPos = KmerPos {
-            //seq : kmer.seq.clone(),
-            start: start_pos_on_fwd,
-            end: end_pos_on_fwd,
-            orient: true,
-        };
-        kmers_on_fwd.push(curr_kmer);
-    }
-
-    kmers_on_fwd
-}
- */
-
 
 /// Generate the hashes of the sequence encoded in each kmer
 pub fn generate_hash(seq: &String) -> u64 {

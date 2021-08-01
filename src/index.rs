@@ -712,7 +712,7 @@ mod test {
                 let ref_pos : &KmerPos = kmers_positions_on_ref.get(starting_pos + offset).unwrap();
 
                 let ref_sequence : String;
-                if ref_pos.orient == true {
+                if ref_pos.start_orient == true {
                     ref_sequence = seq_fwd.clone();
                 } else {
                     ref_sequence = seq_rev.clone();
