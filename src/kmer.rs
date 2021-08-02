@@ -17,10 +17,14 @@ use crate::utils::NodeRef;
 use std::ops::{Index, Deref};
 use rayon::prelude::ParallelSliceMut;
 
+// TODO (at the end): use in KmerPos instead of separate pos+orient for begin and end
+/*
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SeqPos {
     orient : bool,
     position : u64
 }
+ */
 
 /// Represents a kmer in the graph
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -480,15 +484,14 @@ fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
 /// Represent kmer positions on the forward/reverse linearization
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct KmerPos {
-    //seq : String,
     /// The start position of the kmer
     pub(crate) start: u64,
     /// The orientation of the kmer
-    pub(crate) start_orient: bool,
+    pub(crate) start_orient: bool, // false = fwd, true = rev
     /// The end position of the kmer
     pub(crate) end: u64,
     /// The orientation of the kmer
-    pub(crate) end_orient: bool,
+    pub(crate) end_orient: bool,    // false = fwd, true = rev
 
 }
 

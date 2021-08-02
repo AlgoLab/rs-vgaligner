@@ -13,18 +13,24 @@ pub struct Anchor {
     pub query_begin : u64,
     pub query_end : u64,
     target_begin : u64,
+    target_begin_orient : bool,
     target_end : u64,
+    target_end_orient : bool,
     max_chain_score : f64,
     best_predecessor : Option<Box<Anchor>>
 }
 
 impl Anchor {
-    pub fn new(query_begin : u64, query_end : u64, target_begin : u64, target_end : u64) -> Self {
+    pub fn new(query_begin : u64, query_end : u64,
+               target_begin : u64, target_begin_orient : bool,
+               target_end : u64, target_end_orient : bool) -> Self {
         Anchor {
             query_begin,
             query_end,
             target_begin,
+            target_begin_orient,
             target_end,
+            target_end_orient,
             max_chain_score : 0f64,
             best_predecessor : None,
         }
@@ -51,7 +57,8 @@ fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<Anchor> {
         for pos in ref_pos_vec {
             anchors_for_kmer.push(
                 Anchor::new(i as u64, (i+kmer_size) as u64,
-                pos.start, pos.end)
+                pos.start, pos.start_orient,
+                pos.end, pos.end_orient)
             );
         }
 
@@ -98,20 +105,37 @@ impl Chain {
 
     pub fn compute_boundaries(&mut self, seed_length : u64, mismatch_rate : f64) {
         let first_target_end = self.anchors.front().unwrap().target_end;
+        let first_target_end_orient = self.anchors.front().unwrap().target_end_orient;
         let last_target_begin = self.anchors.back().unwrap().target_begin;
+        let last_target_begin_orient = self.anchors.back().unwrap().target_begin_orient;
 
         let first_target_begin = self.anchors.front().unwrap().target_begin;
+        let first_target_begin_orient = self.anchors.front().unwrap().target_begin_orient;
         let last_target_end = self.anchors.back().unwrap().target_end;
+        let last_target_end_orient = self.anchors.back().unwrap().target_end_orient;
 
-        // TODO : if/else that uses seq_pos_t
+        if first_target_begin_orient == last_target_end_orient &&
+            first_target_begin < last_target_end &&
+            self.score * (1f64+mismatch_rate) > (last_target_end - first_target_begin) as f64 {
+            self.target_begin = first_target_begin;
+            self.target_end = last_target_end;
+        } else if first_target_end_orient == last_target_begin_orient &&
+            first_target_end < last_target_begin {
+            self.target_begin = first_target_end;
+            self.target_end = last_target_begin;
+        } else {
+            self.score = - f64::MAX;
+        }
+
     }
 }
 
 
 pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64) -> f64 {
     let mut score : f64 = a.max_chain_score;
-    // TODO: understand and add what's after ||
-    if a.query_end >= b.query_end {
+
+    if a.query_end >= b.query_end ||
+        !(((a.target_end_orient == b.target_end_orient) == a.target_begin_orient) == b.target_begin_orient) {
         score = -f64::MAX;
     } else {
         let query_length : u64 = min(b.query_begin-a.query_begin, b.query_end-a.query_end);
@@ -136,11 +160,9 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
         } else {
             let gap_cost = match gap_length == 0 {
                 true => 0f64,
-                // TODO: understand what this is
                 false => 0.01f64 * (*seed_length as f64) * gap_length as f64 + 0.5f64 * f64::log2(gap_length as f64)
             };
             let match_length = min(min(query_length, target_length), *seed_length);
-            // TODO: understand what this is
             score = f64::round((a.max_chain_score + match_length as f64 - gap_cost as f64) * 1000.0f64) / 1000.0f64 + query_overlap as f64;
 
         }
