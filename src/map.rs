@@ -7,6 +7,8 @@ use std::collections::VecDeque;
 use std::ops::Deref;
 use bio::data_structures::interval_tree::*;
 use core::cmp;
+use std::cmp::Ordering::Equal;
+use float_cmp::approx_eq;
 
 #[derive(Clone, Debug)]
 pub struct Anchor {
@@ -68,6 +70,7 @@ fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<Anchor> {
     anchors
 }
 
+#[derive(Debug, Clone)]
 pub struct Chain {
     anchors : VecDeque<Anchor>,
     score : f64,
@@ -76,6 +79,18 @@ pub struct Chain {
     target_begin : u64,
     target_end : u64
 }
+
+impl PartialEq for Chain {
+    fn eq(&self, other: &Self) -> bool {
+        self.target_begin.eq(&other.target_begin)
+            && self.target_end.eq(&other.target_end)
+            && self.is_secondary.eq(&other.is_secondary)
+            && approx_eq!(f64, self.score, other.score, ulps=2)
+            && approx_eq!(f64, self.mapping_quality, other.mapping_quality, ulps=2)
+    }
+}
+
+impl Eq for Chain {}
 
 impl Chain {
     pub fn new() -> Self {
@@ -171,10 +186,9 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
     score
 }
 
-/*
 pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, bandwidth : u64,
               max_gap : u64, chain_min_n_anchors : u64, secondary_chain_threshold : u64,
-              mismatch_rate : u64) -> Vec<Chain> {
+              mismatch_rate : f64) -> Vec<Chain> {
 
     // First sort the anchors by their ending position
     anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
@@ -221,7 +235,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                 let mut b = a.best_predecessor.unwrap();
                 curr_chain.anchors.push_back(*b);
                 a.best_predecessor = None;
-                a = Box::new(*a.clone());
+                let a = b;
                 if a.best_predecessor.is_none() {
                     break;
                 }
@@ -238,14 +252,15 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
     }
 
     // Sort the chains by score in reverse order (higher first)
-    chains.sort_by(|a,b| b.score.cmp(&a));
+    // can't compare them directly in Rust, so I converted them to i64
+    chains.sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
 
     // TODO: IITree
     let mut interval_tree : ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
     for chain in chains {
         let query_begin = chain.anchors.front().unwrap().query_begin;
         let query_end = chain.anchors.back().unwrap().query_end;
-        interval_tree.insert((query_begin..query_end), chain.clone());
+        interval_tree.insert((query_begin..query_end), chain);
     }
     interval_tree.index();
 
@@ -254,11 +269,11 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
             let chain_begin = chain.anchors.front().unwrap().query_begin;
             let chain_end = chain.anchors.back().unwrap().query_end;
             let chain_length = chain_end - chain_begin;
-            let mut best_secondary: Chain = Chain::new();
+            let mut best_secondary: Option<Chain> = None;
             let mut ovlp = interval_tree.find((chain_begin..chain_end));
             for value in ovlp {
                 let mut other_chain = value.data();
-                if other_chain != chain && other_chain.score <= chain.score {
+                if *other_chain != chain && other_chain.score <= chain.score {
                     let other_begin = value.interval().start;
                     let other_end = value.interval().end;
                     let other_length = other_end - other_begin;
@@ -267,11 +282,11 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                     let ovlp_length = ovlp_end - ovlp_begin;
 
                     if (ovlp_length > other_length * secondary_chain_threshold) {
-                        other_chain.mapping_quality = 0;
+                        other_chain.mapping_quality = 0f64;
                         other_chain.is_secondary = true;
                     }
-                    if best_secondary == None || best_secondary.score < other_chain.score {
-                        best_secondary = other_chain;
+                    if best_secondary.is_none() || best_secondary.unwrap().score < other_chain.score {
+                        best_secondary = Some(*(other_chain.clone()));
                     }
                 }
             }
@@ -280,9 +295,9 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                 //chain.mapping_quality = max_mapq;
             } else {
                 chain.mapping_quality =
-                    40 * (1-best_secondary.score / chain.score)
-                        * cmp::min(1.0f64, chain.anchors.len()/10.0f64)
-                        * f64::log2(chain.score); // TODO: check log
+                    40f64 * (1f64 -best_secondary.unwrap().score / chain.score)
+                        * cmp::min(1, (chain.anchors.len()/10)) as f64
+                        * f64::log2(chain.score); // TODO: check log base2 or base10
             }
         }
     }
@@ -293,7 +308,6 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
 
     chains
 }
- */
 
 /*
     GAF format

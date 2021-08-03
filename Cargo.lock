@@ -91,7 +91,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1161c7b80eea668a884b4be136d83ef5175df5aaa6dcba482bdf4fbe1d046f2"
 dependencies = [
  "approx",
- "bio-types 0.10.0",
+ "bio-types",
  "bit-set",
  "bv",
  "bytecount",
@@ -131,7 +131,7 @@ checksum = "0cd1fa26bbc8822577da82a89c3c362fce337fdca5c1f41f14b4ca6b72065c37"
 dependencies = [
  "anyhow",
  "approx",
- "bio-types 0.12.0",
+ "bio-types",
  "bit-set",
  "bv",
  "bytecount",
@@ -161,19 +161,6 @@ dependencies = [
  "thiserror",
  "triple_accel",
  "vec_map",
-]
-
-[[package]]
-name = "bio-types"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58d64154e76eb7c0d369ad6d26b98bbb331c8968da16d063a3ea215e23bbb31c"
-dependencies = [
- "derive-new",
- "lazy_static",
- "quick-error",
- "regex",
- "strum_macros 0.20.1",
 ]
 
 [[package]]
@@ -468,6 +455,15 @@ name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
+
+[[package]]
+name = "float-cmp"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "fnv"
@@ -1172,6 +1168,7 @@ dependencies = [
  "bstr",
  "bv",
  "clap",
+ "float-cmp",
  "gfa",
  "handlegraph",
  "itertools 0.10.1",
