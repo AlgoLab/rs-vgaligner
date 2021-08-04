@@ -9,6 +9,7 @@ use bio::data_structures::interval_tree::*;
 use core::cmp;
 use std::cmp::Ordering::Equal;
 use float_cmp::approx_eq;
+use rayon::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct Anchor {
@@ -195,10 +196,8 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
 
     for i in 0..anchors.len() {
 
-        {
-            let anchor_i = anchors.get_mut(i).unwrap();
-            anchor_i.max_chain_score = seed_length as f64;
-        }
+        let mut max_score = seed_length as f64;
+        let mut best_predecessor : Option<Box<Anchor>> = None;
 
         let mut min_j : usize = 0;
         if bandwidth > i as u64 {
@@ -208,21 +207,26 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
         }
 
         for j in (i-1..min_j).rev() {
-            let anchor_j = (*anchors.get(j).unwrap()).clone();
-            let mut anchor_i = anchors.get_mut(i).unwrap();
+            let anchor_i = anchors.get(i).unwrap();
+            let anchor_j = anchors.get(j).unwrap();
 
-            let proposed_score = score_anchor(&anchor_j, anchor_i, &seed_length, &max_gap);
-            
-            if proposed_score > anchor_i.max_chain_score {
-                anchor_i.max_chain_score = proposed_score;
-                // TODO: review this
-                anchor_i.best_predecessor = Some(Box::new(anchor_j));
+            let proposed_score = score_anchor(anchor_j, anchor_i, &seed_length, &max_gap);
+
+            if proposed_score > max_score {
+                max_score = proposed_score;
+                best_predecessor = Some(Box::new(anchor_j.clone()));
             }
         }
+
+        let anchor_i_mut = anchors.get_mut(i).unwrap();
+        anchor_i_mut.max_chain_score = max_score;
+        anchor_i_mut.best_predecessor = best_predecessor;
 
     }
 
     let mut chains: Vec<Chain> = Vec::new();
+
+    /*
     let mut i = anchors.len() - 1;
     while i >= 0 {
         let mut a = anchors.get_mut(i).unwrap();
@@ -270,10 +274,11 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
             let chain_end = chain.anchors.back().unwrap().query_end;
             let chain_length = chain_end - chain_begin;
             let mut best_secondary: Option<Chain> = None;
-            let mut ovlp = interval_tree.find((chain_begin..chain_end));
+
+            let ovlp = interval_tree.find((chain_begin..chain_end));
             for value in ovlp {
-                let mut other_chain = value.data();
-                if *other_chain != chain && other_chain.score <= chain.score {
+                let mut other_chain = value.data().clone();
+                if other_chain != chain && other_chain.score <= chain.score {
                     let other_begin = value.interval().start;
                     let other_end = value.interval().end;
                     let other_length = other_end - other_begin;
@@ -281,12 +286,12 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                     let ovlp_end = cmp::min(chain_end, other_end);
                     let ovlp_length = ovlp_end - ovlp_begin;
 
-                    if (ovlp_length > other_length * secondary_chain_threshold) {
+                    if ovlp_length > other_length * secondary_chain_threshold {
                         other_chain.mapping_quality = 0f64;
                         other_chain.is_secondary = true;
                     }
                     if best_secondary.is_none() || best_secondary.unwrap().score < other_chain.score {
-                        best_secondary = Some(*(other_chain.clone()));
+                        best_secondary = Some(other_chain.clone());
                     }
                 }
             }
@@ -302,7 +307,9 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
         }
     }
 
-    for mut chain in chains {
+     */
+
+    for chain in &mut chains {
         chain.compute_boundaries(seed_length, mismatch_rate);
     }
 
