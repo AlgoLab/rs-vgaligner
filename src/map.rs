@@ -235,26 +235,31 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
 
         if a.best_predecessor.is_some() && a.max_chain_score > seed_length as f64 {
             let mut curr_chain = Chain::new();
-            curr_chain.anchors.push_back(a.clone());
             curr_chain.score = a.max_chain_score;
 
-            let mut curr_anchor = Box::new(a.clone());
             loop {
-                match curr_anchor.best_predecessor {
+                // First push the current anchor
+                curr_chain.anchors.push_back(a.clone());
+
+                // Then move backwards (predecessors)
+                match a.best_predecessor {
                     None => break,
-                    Some(mut b) => {
-                        curr_chain.anchors.push_back(*b.clone());
-                        curr_anchor.best_predecessor = None;
-                        curr_anchor = b;
+                    Some(ref mut b) => {
+                        //curr_chain.anchors.push_back(*b.clone());
+                        //a.best_predecessor = None;
+                        a = b;
                     }
 
                 }
             }
-            if curr_chain.anchors.len() < chain_min_n_anchors as usize {
-                chains.pop();
-            } else {
-                // reverse the anchors
+
+            for anchor in &mut curr_chain.anchors {
+                anchor.best_predecessor = None;
+            }
+
+            if curr_chain.anchors.len() >= chain_min_n_anchors as usize {
                 curr_chain.anchors = VecDeque::from_iter(curr_chain.anchors.into_iter().rev());
+                chains.push(curr_chain);
             }
         }
         i -= 1;
