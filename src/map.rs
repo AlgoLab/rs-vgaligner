@@ -233,21 +233,21 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
     while i >= 0 {
         let mut a = anchors.get_mut(i).unwrap();
 
-        if a.best_predecessor.is_none() && a.max_chain_score > seed_length as f64 {
+        if a.best_predecessor.is_some() && a.max_chain_score > seed_length as f64 {
             let mut curr_chain = Chain::new();
             curr_chain.anchors.push_back(a.clone());
             curr_chain.score = a.max_chain_score;
 
-            let mut curr_anchor = a;
+            let mut curr_anchor = Box::new(a.clone());
             loop {
-                if let Some(b) = &mut curr_anchor.best_predecessor {
-                    curr_chain.anchors.push_back(*b.clone());
-                    curr_anchor.best_predecessor = None;
-                    // TODO: fix pointer that goes back
-                    //curr_anchor = b.as_ref_mut();
-                }
-                if curr_anchor.best_predecessor.is_none() {
-                    break;
+                match curr_anchor.best_predecessor {
+                    None => break,
+                    Some(mut b) => {
+                        curr_chain.anchors.push_back(*b.clone());
+                        curr_anchor.best_predecessor = None;
+                        curr_anchor = b;
+                    }
+
                 }
             }
             if curr_chain.anchors.len() < chain_min_n_anchors as usize {
@@ -332,6 +332,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
     3       int     Query start (0-based; closed)
     4       int     Query end (0-based; open)
     5       char    Strand relative to the path: "+" or "-"
+
     6       string  Path matching /([><][^\s><]+(:\d+-\d+)?)+|([^\s><]+)/
     7       int     Path length
     8       int     Start position on the path (0-based)
