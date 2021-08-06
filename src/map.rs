@@ -188,8 +188,8 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
     score
 }
 
-pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, bandwidth : u64,
-              max_gap : u64, chain_min_n_anchors : u64, secondary_chain_threshold : u64,
+pub fn chains(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : u64,
+              max_gap : u64, chain_min_n_anchors : u64, secondary_chain_threshold : f64,
               mismatch_rate : f64, max_mapq : f64) -> Vec<Chain> {
 
     // First sort the anchors by their ending position
@@ -245,8 +245,6 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                 match a.best_predecessor {
                     None => break,
                     Some(ref mut b) => {
-                        //curr_chain.anchors.push_back(*b.clone());
-                        //a.best_predecessor = None;
                         a = b;
                     }
 
@@ -297,7 +295,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
                     let ovlp_end = cmp::min(chain_end, other_end);
                     let ovlp_length = ovlp_end - ovlp_begin;
 
-                    if ovlp_length > other_length * secondary_chain_threshold {
+                    if ovlp_length > other_length * secondary_chain_threshold as u64 {
                         other_chain.mapping_quality = 0f64;
                         other_chain.is_secondary = true;
                     }
@@ -347,7 +345,7 @@ pub fn chains(anchors : &mut Vec<Anchor>, kmer_length : u64, seed_length : u64, 
     12      int     Mapping quality (0-255; 255 for missing)
 */
 pub fn write_chain_gaf(chain : &Chain, index : &Index,
-                       query_name : String, query_length : u64) -> String {
+                       query_name : &String, query_length : usize) -> String {
 
     let query_begin = chain.anchors.front().unwrap().query_begin;
     let query_end = chain.anchors.back().unwrap().query_end;
@@ -371,14 +369,26 @@ pub fn write_chain_gaf(chain : &Chain, index : &Index,
     format!("{}{}", first_half_gaf_line, second_half_gaf_line)
 }
 
-// TODO: add other params
-pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>, seed_length : u64, bandwidth : u64, max_gap : u64) {
+pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
+                 bandwidth : u64, max_gap : u64,
+                 chain_min_n_anchors : u64, secondary_chain_threshold : f64,
+                 max_mismatch_rate : f64, max_mapq : f64, write_chains : bool) {
 
     for seq in inputs {
         // First find the anchors, aka exact matches between
         // seqs and kmers in the index
         let mut anchors: Vec<Anchor> = anchors_for_query(index, seq);
-        //let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length, seed_length, bandwidth, max_gap, 100);
+        
+        // Chain close anchors together to find longer matches
+        let chains : Vec<Chain> = chains(&mut anchors, index.kmer_length,bandwidth,
+                                         max_gap, chain_min_n_anchors, secondary_chain_threshold,
+                                         max_mismatch_rate, max_mapq);
+
+        if write_chains {
+            for chain in &chains {
+                write_chain_gaf(chain, index, &seq.name, seq.seq.len());
+            }
+        }
     }
 
 }

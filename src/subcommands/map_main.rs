@@ -19,7 +19,7 @@ pub fn map_main(global_matches : &ArgMatches) {
     let max_mismatch_rate = matches
         .value_of("max-mismatch-rate")
         .unwrap_or_else(|| &"0.1")
-        .parse::<f32>()
+        .parse::<f64>()
         .unwrap();
 
     let chain_overlap_max = matches
@@ -28,7 +28,7 @@ pub fn map_main(global_matches : &ArgMatches) {
         .parse::<f32>()
         .unwrap();
 
-    let chain_min_anchors = matches
+    let chain_min_n_anchors = matches
         .value_of("chain-min-anchors")
         .unwrap_or_else(|| &"3")
         .parse::<u64>()
@@ -54,5 +54,8 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     let query = read_seqs_from_file(&in_path_file).unwrap();
 
-    map_reads(&index, &query, 10, 0, max_gap_length);
+    map_reads(&index, &query,50, max_gap_length,
+              chain_min_n_anchors, 0.5f64,
+              max_mismatch_rate, 60.0f64,
+              write_chains);
 }
