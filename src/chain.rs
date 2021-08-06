@@ -162,7 +162,20 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
             false => 0
         };
 
-        let target_length = min(b.target_begin-a.target_begin, b.target_end-a.target_end);
+        // TODO: review this
+        // Removed the following line because it would overflow (i.e. a-b when a < b)
+        //let target_length = min(b.target_begin-a.target_begin, b.target_end-a.target_end);
+
+        let target_begin_diff = match b.target_begin > a.target_begin {
+            true => b.target_begin - a.target_begin,
+            false => a.target_begin - b.target_begin
+        };
+        let target_end_diff = match b.target_end > a.target_end {
+            true => b.target_end - a.target_end,
+            false => a.target_end - b.target_end
+        };
+        let target_length = min(target_begin_diff, target_end_diff);
+
 
         // Abs of two unsigned integers doesn't make sense (in Rust)
         //let gap_length = (query_length - target_length).abs();
@@ -209,7 +222,12 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         }
 
         if i > 0 {
-            for j in (i-1..min_j).rev() {
+
+            //RUST NOTE: in a range (a..b), a MUST ALWAYS be less than b (even when going backwards
+            // with .rev()!) otherwise it will be empty.
+            // In this case the following loop would not work.
+
+            for j in (min_j..i-1).rev() {
                 let anchor_i = anchors.get(i).unwrap();
                 let anchor_j = anchors.get(j).unwrap();
 
@@ -457,7 +475,7 @@ mod test {
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
     }
-    
+
     #[test]
     fn test_chains() {
         let mut graph = create_simple_graph();
@@ -470,6 +488,8 @@ mod test {
                                                1000, 3, 0.5f64,
                                                0.1f64, 60.0f64);
         assert!(!chains.is_empty());
+        println!("Chains: {:#?}", chains);
+        println!("Chains length: {}", chains.len());
     }
 
     #[test]
@@ -486,9 +506,11 @@ mod test {
         let mut anchors = anchors_for_query(&index, &input_seq);
 
         let chains: Vec<Chain> = chain_anchors(&mut anchors, index.kmer_length, 50,
-                                               1000, 3, 0.5f64,
+                                               1000, 2, 0.5f64,
                                                0.1f64, 60.0f64);
         assert!(!chains.is_empty());
+        //println!("Chains_2: {:#?}", chains);
+        //println!("Chains_2 length: {}", chains.len());
     }
 
     #[test]
