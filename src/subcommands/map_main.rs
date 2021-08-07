@@ -10,6 +10,8 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     let in_path_file = matches.value_of("input-file").unwrap();
 
+    let out_prefix = matches.value_of("out-prefix");
+
     let max_gap_length = matches
         .value_of("max-gap-length")
         .unwrap_or_else(|| &"1000")
@@ -57,5 +59,5 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query,50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains);
+              write_chains, out_prefix);
 }

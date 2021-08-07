@@ -48,6 +48,6 @@ pub fn index_main(global_matches : &ArgMatches) {
         max_furcations,
         max_degree,
         sampling_rate,
-        Some(out_prefix.to_string()),
+        Some(out_prefix),
     );
 }

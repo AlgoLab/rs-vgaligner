@@ -82,7 +82,7 @@ impl Index {
         max_furcations: u64,
         max_degree: u64,
         _sampling_rate: f32,
-        out_prefix: Option<String>,
+        out_prefix: Option<&str>,
     ) -> Self {
         // Get the number of nodes in the graph
         let number_nodes = graph.graph.len() as u64;
@@ -204,7 +204,7 @@ impl Index {
                 n_kmer_positions: index.kmer_pos_table.len() as u64
             };
 
-            match index.store_with_prefix(meta, out_prefix) {
+            match index.store_with_prefix(meta, out_prefix.to_string()) {
                 Err(e) => panic!("{}",e),
                 _ => println!("Index stored correctly!"),
             }
