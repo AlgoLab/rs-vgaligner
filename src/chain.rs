@@ -11,7 +11,13 @@ use std::cmp::Ordering::Equal;
 use float_cmp::approx_eq;
 use rayon::prelude::*;
 use std::iter::FromIterator;
+use std::collections::vec_deque::VecDeque;
 
+/// An exact match between the input sequence and the graph. With respect to the Minimap2 paper,
+/// where an anchor is a triple (x,y,w), in this implementation we have that:
+/// - x = target_end
+/// - y = query_end
+/// - w = index.kmer_size
 #[derive(Clone, Debug)]
 pub struct Anchor {
     pub query_begin : u64,
@@ -41,6 +47,9 @@ impl Anchor {
     }
 }
 
+/// Obtain all the anchors between the [index] and the [query] sequence
+// Since the kmer positions are already stored in the index, one simply has to
+// split the query into kmers, and then get the target positions from the index itself.
 pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<Anchor> {
     let mut anchors : Vec<Anchor> = Vec::new();
 
@@ -72,6 +81,7 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
     anchors
 }
 
+/// Multiple anchors chained together to get a longer match
 #[derive(Debug, Clone)]
 pub struct Chain {
     pub anchors : VecDeque<Anchor>,
@@ -120,7 +130,10 @@ impl Chain {
         self.anchors.back().unwrap().query_end
     }
 
+    // find the longest contiguous range covered by the chain
+    // where the size is no more than some function of our seed_length * number of anchors * 1+mismatch_rate
     pub fn compute_boundaries(&mut self, seed_length : u64, mismatch_rate : f64) {
+
         let first_target_end = self.anchors.front().unwrap().target_end;
         let first_target_end_orient = self.anchors.front().unwrap().target_end_orient;
         let last_target_begin = self.anchors.back().unwrap().target_begin;
@@ -155,6 +168,7 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
         !(((a.target_end_orient == b.target_end_orient) == a.target_begin_orient) == b.target_begin_orient) {
         score = -f64::MAX;
     } else {
+
         let query_length : u64 = min(b.query_begin-a.query_begin, b.query_end-a.query_end);
 
         let query_overlap = match a.query_end > b.query_end {
@@ -176,10 +190,10 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
         };
         let target_length = min(target_begin_diff, target_end_diff);
 
-
-        // Abs of two unsigned integers doesn't make sense (in Rust)
+        // First we compute the inner part of gamma_c, aka the "gap length".
+        // RUST DETAIL: Abs of two unsigned integers doesn't make sense (in Rust)
         //let gap_length = (query_length - target_length).abs();
-        // This should be equivalent
+        // The following match should be equivalent.
         let gap_length = match query_length > target_length {
             true => query_length - target_length,
             false => target_length - query_length
@@ -188,13 +202,18 @@ pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64
         if gap_length > *max_gap {
             score = -f64::MAX;
         } else {
+            // This is gamma_c(l) in the paper, aka the "gap cost". This is also equivalent
+            // to B(j,i).
             let gap_cost = match gap_length == 0 {
                 true => 0f64,
                 false => 0.01f64 * (*seed_length as f64) * gap_length as f64 + 0.5f64 * f64::log2(gap_length as f64)
             };
-            let match_length = min(min(query_length, target_length), *seed_length);
-            score = f64::round((a.max_chain_score + match_length as f64 - gap_cost as f64) * 1000.0f64) / 1000.0f64 + query_overlap as f64;
 
+            // This is a(j,i)
+            let match_length = min(min(query_length, target_length), *seed_length);
+
+            // This is f(j) + a(j,i) - B(j,i)
+            score = f64::round((a.max_chain_score + match_length as f64 - gap_cost as f64) * 1000.0f64) / 1000.0f64 + query_overlap as f64;
         }
     }
 
@@ -205,10 +224,13 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
               max_gap : u64, chain_min_n_anchors : u64, secondary_chain_threshold : f64,
               mismatch_rate : f64, max_mapq : f64) -> Vec<Chain> {
 
+    // ----- STEP 1 : finding the optimal chaining scores -----
+
     // First sort the anchors by their ending position
     anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
 
-    //println!("Anchors len: {:#?}", anchors.len());
+    // Then, compute the maximal chaining score up to the current anchor.
+    // This score is called f(i) in the paper.
     for i in 0..anchors.len() {
 
         let mut max_score = seed_length as f64;
@@ -224,15 +246,17 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         if i > 0 {
 
             //RUST NOTE: in a range (a..b), a MUST ALWAYS be less than b (even when going backwards
-            // with .rev()!) otherwise it will be empty.
-            // In this case the following loop would not work.
+            // with .rev()!) otherwise it will be empty. Previously, due to this error,
+            // the following loop would not work.
 
             for j in (min_j..i-1).rev() {
                 let anchor_i = anchors.get(i).unwrap();
                 let anchor_j = anchors.get(j).unwrap();
 
+                // This is where we compute f(j) + a(j,i) - B(j,i)
                 let proposed_score = score_anchor(anchor_j, anchor_i, &seed_length, &max_gap);
 
+                // We are now obtaining f(i)
                 if proposed_score > max_score {
                     max_score = proposed_score;
                     best_predecessor = Some(Box::new(anchor_j.clone()));
@@ -246,6 +270,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         anchor_i_mut.best_predecessor = best_predecessor;
     }
 
+    // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
 
     let mut chains: Vec<Chain> = Vec::new();
 
@@ -292,6 +317,8 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         }
 
     }
+
+    // ----- STEP 3: Identifying primary chains (= chains with little or no overlap on the query) -----
 
     // Sort the chains by score in reverse order (higher first)
     chains.sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
@@ -346,7 +373,6 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         }
     }
 
-
     for chain in &mut chains {
         chain.compute_boundaries(seed_length, mismatch_rate);
     }
@@ -373,6 +399,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     11      int     Alignment block length
     12      int     Mapping quality (0-255; 255 for missing)
 */
+/// Convert a chain to a string in GAF (Graph Alignment Format)
 pub fn write_chain_gaf(chain : &Chain, index : &Index,
                        query_name : &String, query_length : usize) -> String {
 

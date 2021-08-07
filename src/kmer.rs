@@ -482,6 +482,7 @@ fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
 }
 
 /// Represent kmer positions on the forward/reverse linearization
+/// (= graph sequence space).
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct KmerPos {
     /// The start position of the kmer

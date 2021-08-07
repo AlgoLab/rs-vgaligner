@@ -5,6 +5,8 @@ use std::fs::File;
 use std::io::Write;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
 
+/// Map the [input] reads against the [index].
+// TODO: add explaination to other parameters
 pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
                  bandwidth : u64, max_gap : u64,
                  chain_min_n_anchors : u64, secondary_chain_threshold : f64,
@@ -60,7 +62,8 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
 
 }
 
-pub fn write_chains_to_file(
+/// Store [chains_gaf_strings] in the file with name [file_name]
+fn write_chains_to_file(
     chains_gaf_strings : &Vec<String>,
     file_name: String,
 ) -> std::io::Result<()> {

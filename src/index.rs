@@ -48,23 +48,23 @@ pub struct Index {
 
     // Relevant part for index ---------
     /// Number of (unique!) kmers in the index (this is also the number of keys in the index,
-    /// also stored in [kmer_pos_ref])
+    /// also stored in [`kmer_pos_ref`])
     n_kmers: u64,
     /// Number of kmer positions in the index (note that since a kmer can appear multiple times,
     /// so the following will always hold: n_kmer_pos >= n_kmers)
     n_kmer_pos: u64,
     /// The kmer hash table. This is a map that has as keys the unique kmer hashes (also found
-    /// in [kmer_pos_ref], and as values the starting index in [kmer_pos_table]
+    /// in [`kmer_pos_ref`], and as values the starting index in [`kmer_pos_table`]
     bhpf : NoKeyBoomHashMap<u64, u64>,
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
-    /// The hashes over which the Index was built upon (aka the keys of [bhpf])
+    /// The hashes over which the Index was built upon (aka the keys of [`bhpf`])
     kmer_pos_ref: Vec<u64>,
     // our kmer positions table. The values of the index are positions in this vector
     /// The oriented positions (KmerPos) in the sequence graph space. Note that, since
     /// a kmer can appear in multiple places in the graph (and also on opposite strands),
-    /// it will have multiple positions in [kmer_pos_table]. All the positions relative
+    /// it will have multiple positions in [`kmer_pos_table`]. All the positions relative
     /// to the same kmer are stored close to each other, so we only have to keep track
-    /// of the starting position (this is done via [bhpf]), and the ending position
+    /// of the starting position (this is done via [`bhpf`]), and the ending position
     /// (this is done by adding "fake" KmerPos that act as delimiters).
     kmer_pos_table: Vec<KmerPos>,
     // End of relevant part for index --------
@@ -89,10 +89,10 @@ struct Metadata {
 
 impl Index {
 
-    /// Build an index over the kmers of length [kmer_length] for a given [graph]
-    /// and store its various files in a location with prefix [out_prefix].
-    /// It is also possible to set a limit on the [max_furcations] to be used during the
-    /// graph visit, and also on the [max_degree] that a node can have.
+    /// Build an index over the kmers of length [`kmer_length`] for a given [`graph`]
+    /// and store its various files in a location with prefix [`out_prefix`].
+    /// It is also possible to set a limit on the [`max_furcations`] to be used during the
+    /// graph visit, and also on the [`max_degree`] that a node can have.
     pub fn build(
         graph: &HashGraph,
         kmer_length: u64,
@@ -288,7 +288,7 @@ impl Index {
         }
     }
 
-    /// Find the starting position of a certain kmer with seq [seq] in the index
+    /// Find the starting position of a certain kmer with seq [`seq`] in the index
     /// (or rather in kmer_pos_table)
     fn find_start_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
 
@@ -329,7 +329,7 @@ impl Index {
     }
 
     /// Find the positions on the graph sequence vector for the kmer
-    /// having seq [kmer_seq].
+    /// having seq [`kmer_seq`].
     pub fn find_positions_for_query_kmer(&self, kmer_seq : &str) -> Vec<KmerPos> {
 
         let mut kmer_positions_on_ref : Vec<KmerPos> = Vec::new();
