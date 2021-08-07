@@ -15,54 +15,67 @@ use std::error::Error;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
+/// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
 #[derive(Debug)]
 pub struct Index {
-    // the kmer size that this graph was built on
+    /// The kmer size that this graph was built on
     pub kmer_length: u64,
     // consider only kmers where to_key(kmer) % sampling_mod == 0
     //sampling_length: u64,
 
     // Various data related to the starting graph -----
-    // total sequence length of the graph
+    /// Total sequence length of the graph (= length of the forward/reverse)
     seq_length: u64,
-    // forward sequence of the graph, stored here for fast access during alignment
+    /// Forward sequence of the graph, stored here for fast access during alignment
     pub(crate) seq_fwd: String,
-    // reverse complemented sequence of the graph, for fast access during alignment
+    /// Reverse complemented sequence of the graph, for fast access during alignment
     seq_rev: String,
-    // mark node starts in forward
+    /// Mark node starts in forward
     seq_bv: BitVec,
     // lets us map between our seq vector and handles (when our input graph is compacted!)
     //seq_by_rank: BitVec,
-    // edge count
+    /// Edge count of the input graph
     n_edges: u64,
     // what's the most-efficient graph topology we can store?
+    /// Edges of the input graph
     edges: Vec<Edge>,
-    // node count
+    /// Node count of the input graph
     n_nodes: u64,
     // refer to ranges in edges
+    /// Compactly represent nodes and edges of the input graph
     node_ref: Vec<NodeRef>,
     // End of various data related to the starting graph -----
 
     // Relevant part for index ---------
-    // number of kmers in the index.
-    // This is also the number of keys in the index
+    /// Number of (unique!) kmers in the index (this is also the number of keys in the index,
+    /// also stored in [kmer_pos_ref])
     n_kmers: u64,
-    // number of kmer positions in the index.
-    // Note that since a kmer can appear multiple times, n_kmer_pos >= n_kmers
+    /// Number of kmer positions in the index (note that since a kmer can appear multiple times,
+    /// so the following will always hold: n_kmer_pos >= n_kmers)
     n_kmer_pos: u64,
-    // our kmer hash table
+    /// The kmer hash table. This is a map that has as keys the unique kmer hashes (also found
+    /// in [kmer_pos_ref], and as values the starting index in [kmer_pos_table]
     bhpf : NoKeyBoomHashMap<u64, u64>,
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
-    // these are basically the hashes, aka the keys of index
+    /// The hashes over which the Index was built upon (aka the keys of [bhpf])
     kmer_pos_ref: Vec<u64>,
     // our kmer positions table. The values of the index are positions in this vector
+    /// The oriented positions (KmerPos) in the sequence graph space. Note that, since
+    /// a kmer can appear in multiple places in the graph (and also on opposite strands),
+    /// it will have multiple positions in [kmer_pos_table]. All the positions relative
+    /// to the same kmer are stored close to each other, so we only have to keep track
+    /// of the starting position (this is done via [bhpf]), and the ending position
+    /// (this is done by adding "fake" KmerPos that act as delimiters).
     kmer_pos_table: Vec<KmerPos>,
     // End of relevant part for index --------
 
     // if we're loaded, helps during teardown
+    /// Check if the index has been loaded
     pub(crate) loaded: bool,
 }
 
+
+/// Additional metadata used during (de)-serialization
 #[derive(Serialize, Deserialize)]
 struct Metadata {
     seq_length : u64,
@@ -76,6 +89,10 @@ struct Metadata {
 
 impl Index {
 
+    /// Build an index over the kmers of length [kmer_length] for a given [graph]
+    /// and store its various files in a location with prefix [out_prefix].
+    /// It is also possible to set a limit on the [max_furcations] to be used during the
+    /// graph visit, and also on the [max_degree] that a node can have.
     pub fn build(
         graph: &HashGraph,
         kmer_length: u64,
@@ -214,6 +231,7 @@ impl Index {
         index
     }
 
+    /// Store the index in a location with prefix [out_prefix]
     fn store_with_prefix(&self, meta : Metadata, out_prefix: String) -> std::io::Result<()> {
         serialize_object_to_file(&self.seq_fwd, out_prefix.clone() + ".sqf")?;
         serialize_object_to_file(&self.seq_rev, out_prefix.clone() + ".sqr")?;
@@ -270,7 +288,8 @@ impl Index {
         }
     }
 
-    // Find the starting position of a certain kmer in the index (or rather in kmer_pos_table)
+    /// Find the starting position of a certain kmer with seq [seq] in the index
+    /// (or rather in kmer_pos_table)
     fn find_start_position_in_index(&self, seq: &str) -> Result<usize, &'static str> {
 
         if seq.len() != self.kmer_length as usize {
@@ -290,7 +309,7 @@ impl Index {
 
     }
 
-    // Find the ending position of a certain kmer in the index (or rather in kmer_pos_table)
+    /// Find the ending position of a certain kmer in the index (or rather in kmer_pos_table)
     fn find_end_position_in_index(&self, seq: &str, start_pos : usize) -> Result<usize, &'static str> {
         // Begin at the starting pos
         let mut offset : usize = 0;
@@ -309,11 +328,16 @@ impl Index {
         Ok(start_pos+offset)
     }
 
-    pub fn find_positions_for_query_kmer(&self, kmer : &str) -> Vec<KmerPos> {
+    /// Find the positions on the graph sequence vector for the kmer
+    /// having seq [kmer_seq].
+    pub fn find_positions_for_query_kmer(&self, kmer_seq : &str) -> Vec<KmerPos> {
 
         let mut kmer_positions_on_ref : Vec<KmerPos> = Vec::new();
 
-        let starting_pos = match self.find_start_position_in_index(kmer) {
+        // This also checks if the provided kmers has the same size as the
+        // kmer_size used when building the Index. If that's not the case, return
+        // an empty Vec
+        let starting_pos = match self.find_start_position_in_index(kmer_seq) {
             Ok(pos) => pos,
             Err(_) => usize::MAX
         };
@@ -323,7 +347,7 @@ impl Index {
 
         // Kmer is actually in the index
         if starting_pos != usize::MAX {
-            let ending_pos = self.find_end_position_in_index(kmer, starting_pos).unwrap();
+            let ending_pos = self.find_end_position_in_index(kmer_seq, starting_pos).unwrap();
             let mut offset : usize = 0;
 
             while starting_pos + offset <= ending_pos {
@@ -339,7 +363,6 @@ impl Index {
 
 
 }
-
 
 
 #[cfg(test)]
