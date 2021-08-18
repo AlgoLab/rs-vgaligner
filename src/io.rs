@@ -22,16 +22,22 @@ pub struct InputSequence {
 }
 
 impl InputSequence {
+
+    // TODO: maybe an Option return type would be better
     pub fn split_into_kmers(&self, kmer_size : usize) -> Vec<String> {
         let mut seq_kmers : Vec<String> = Vec::new();
 
         let query_string = String::from(self.seq.clone());
-        let end = self.seq.len() - kmer_size;
-        for i in 0..(self.seq.len() - kmer_size + 1)  {
-            seq_kmers.push(String::from(
-                                query_string.substring(i,i+kmer_size)));
+
+        // Check if it's possible to obtain kmers (otherwise return empty vec)
+        if kmer_size < query_string.len() {
+            //let end = self.seq.len() - kmer_size;
+            for i in 0..(self.seq.len() - kmer_size + 1)  {
+                seq_kmers.push(String::from(
+                    query_string.substring(i,i+kmer_size)));
+            }
+            //println!("Query kmers: {:#?}", seq_kmers);
         }
-        //println!("Query kmers: {:#?}", seq_kmers);
 
         seq_kmers
     }
@@ -80,7 +86,7 @@ pub fn read_seqs_from_file(filename : &str) -> Result<Vec<InputSequence>> {
 
 #[cfg(test)]
 mod test {
-    use crate::io::read_seqs_from_file;
+    use crate::io::{read_seqs_from_file, InputSequence};
 
     #[test]
     fn test_read_fasta() {
@@ -94,11 +100,22 @@ mod test {
         assert_eq!(test_seqs.len(), 1);
     }
 
-    /*
     #[test]
-    fn test_wrong_extension() {
-        let test_seqs = read_seqs_from_file("./test/test.gfa").unwrap();
-        println!("Test: {:#?}", test_seqs);
+    fn test_split_ok() {
+        let test_seq = InputSequence::from_string(&String::from("AAACTG"));
+        let seq_kmers = test_seq.split_into_kmers(3);
+        assert_eq!(seq_kmers.len(), 4);
+        assert_eq!(*seq_kmers.get(0).unwrap(), String::from("AAA"));
+        assert_eq!(*seq_kmers.get(1).unwrap(), String::from("AAC"));
+        assert_eq!(*seq_kmers.get(2).unwrap(), String::from("ACT"));
+        assert_eq!(*seq_kmers.get(3).unwrap(), String::from("CTG"));
     }
-     */
+
+    #[test]
+    fn test_split_greater() {
+        let test_seq = InputSequence::from_string(&String::from("AAA"));
+        let seq_kmers = test_seq.split_into_kmers(4);
+        assert_eq!(seq_kmers.len(), 0);
+    }
+
 }

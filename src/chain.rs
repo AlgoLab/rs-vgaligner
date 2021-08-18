@@ -11,7 +11,6 @@ use std::cmp::Ordering::Equal;
 use float_cmp::approx_eq;
 use rayon::prelude::*;
 use std::iter::FromIterator;
-use std::collections::vec_deque::VecDeque;
 
 /// An exact match between the input sequence and the graph. With respect to the Minimap2 paper,
 /// where an anchor is a triple (x,y,w), in this implementation we have that:
@@ -27,6 +26,7 @@ pub struct Anchor {
     target_end : u64,
     target_end_orient : bool,
     max_chain_score : f64,
+    // TODO: I should use references here
     best_predecessor : Option<Box<Anchor>>
 }
 
@@ -160,7 +160,6 @@ impl Chain {
     }
 }
 
-
 pub fn score_anchor(a : &Anchor, b : &Anchor, seed_length : &u64, max_gap : &u64) -> f64 {
     let mut score : f64 = a.max_chain_score;
 
@@ -231,49 +230,44 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
 
     // Then, compute the maximal chaining score up to the current anchor.
     // This score is called f(i) in the paper.
-    for i in 0..anchors.len() {
+    // NOTE: Starts at 1 because anchors[0] has no previous values
+    for i in 1..anchors.len() {
 
-        let mut max_score = seed_length as f64;
-        let mut best_predecessor : Option<Box<Anchor>> = None;
+        let mut min_j = match bandwidth > i as u64 {
+            true => 0,
+            false => i - bandwidth as usize,
+        };
 
-        let mut min_j : usize = 0;
-        if bandwidth > i as u64 {
-            min_j = 0;
-        } else {
-            min_j = i - bandwidth as usize;
-        }
+        //RUST NOTE: in a range (a..b), a MUST ALWAYS be less than b (even when going backwards
+        // with .rev()!) otherwise it will be empty. Previously, due to this error,
+        // the following loop would not work.
 
-        if i > 0 {
+        // RUST NOTE 2: the usage of references here a bit of a hack...
+        // I should get a mutable reference to anchors[i] in this scope
+        // and a non mutable one to anchors[j] inside the nested loop,
+        // but Rust does not like that. TODO (again)?
+        for j in (min_j..i-1).rev() {
+            let anchor_j = anchors.get(j).unwrap().clone();
+            let anchor_i = anchors.get_mut(i).unwrap();
 
-            //RUST NOTE: in a range (a..b), a MUST ALWAYS be less than b (even when going backwards
-            // with .rev()!) otherwise it will be empty. Previously, due to this error,
-            // the following loop would not work.
+            // This is where we compute f(j) + a(j,i) - B(j,i)
+            let proposed_score = score_anchor(&anchor_j, anchor_i, &seed_length, &max_gap);
 
-            for j in (min_j..i-1).rev() {
-                let anchor_i = anchors.get(i).unwrap();
-                let anchor_j = anchors.get(j).unwrap();
-
-                // This is where we compute f(j) + a(j,i) - B(j,i)
-                let proposed_score = score_anchor(anchor_j, anchor_i, &seed_length, &max_gap);
-
-                // We are now obtaining f(i)
-                if proposed_score > max_score {
-                    max_score = proposed_score;
-                    best_predecessor = Some(Box::new(anchor_j.clone()));
-                }
+            // We are now obtaining f(i)
+            if proposed_score > anchor_i.max_chain_score {
+                anchor_i.max_chain_score = proposed_score;
+                anchor_i.best_predecessor = Some(Box::new(anchor_j.clone()));
             }
+
         }
 
-        // TODO: check if this should be outside of if above
-        let anchor_i_mut = anchors.get_mut(i).unwrap();
-        anchor_i_mut.max_chain_score = max_score;
-        anchor_i_mut.best_predecessor = best_predecessor;
     }
 
     // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
-
     let mut chains: Vec<Chain> = Vec::new();
 
+    // TODO: this does not work properly as Anchors should contain pointers
+    // to other Anchors
     if !anchors.is_empty() {
 
         let mut i = anchors.len() - 1;

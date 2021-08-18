@@ -330,6 +330,7 @@ impl Index {
 
     /// Find the positions on the graph sequence vector for the kmer
     /// having seq [`kmer_seq`].
+    // NOTE: this is the equivalent of the "query" option in the original dozyg
     pub fn find_positions_for_query_kmer(&self, kmer_seq : &str) -> Vec<KmerPos> {
 
         let mut kmer_positions_on_ref : Vec<KmerPos> = Vec::new();
