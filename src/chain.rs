@@ -12,6 +12,11 @@ use float_cmp::approx_eq;
 use rayon::prelude::*;
 use std::iter::FromIterator;
 
+// Instead of using pointers like in the original implementation,
+// now each Anchor has an id, and the best predecessor is
+// identified by its id
+type anchor_id = u64;
+
 /// An exact match between the input sequence and the graph. With respect to the Minimap2 paper,
 /// where an anchor is a triple (x,y,w), in this implementation we have that:
 /// - x = target_end
@@ -26,14 +31,17 @@ pub struct Anchor {
     target_end : u64,
     target_end_orient : bool,
     max_chain_score : f64,
-    // TODO: I should use references here
-    best_predecessor : Option<Box<Anchor>>
+    //best_predecessor : Option<Box<Anchor>>
+    id : anchor_id,
+    best_predecessor_id : Option<anchor_id>
+
 }
 
 impl Anchor {
     pub fn new(query_begin : u64, query_end : u64,
                target_begin : u64, target_begin_orient : bool,
-               target_end : u64, target_end_orient : bool) -> Self {
+               target_end : u64, target_end_orient : bool,
+               id : u64) -> Self {
         Anchor {
             query_begin,
             query_end,
@@ -42,7 +50,8 @@ impl Anchor {
             target_end,
             target_end_orient,
             max_chain_score : 0f64,
-            best_predecessor : None,
+            id,
+            best_predecessor_id : None,
         }
     }
 }
@@ -59,6 +68,7 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
     let query_kmers : Vec<String> = query.split_into_kmers(kmer_size);
 
     // Find anchors for each kmer in query
+    let mut id : anchor_id = 0;
     for i in 0..query_kmers.len() {
         let kmer = query_kmers.get(i).unwrap();
         let ref_pos_vec = index.find_positions_for_query_kmer(&kmer.as_str());
@@ -71,8 +81,9 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
             anchors_for_kmer.push(
                 Anchor::new(i as u64, (i+kmer_size) as u64,
                             pos.start, pos.start_orient,
-                            pos.end, pos.end_orient)
+                            pos.end, pos.end_orient, id)
             );
+            id += 1;
         }
 
         anchors.extend(anchors_for_kmer);
@@ -256,7 +267,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
             // We are now obtaining f(i)
             if proposed_score > anchor_i.max_chain_score {
                 anchor_i.max_chain_score = proposed_score;
-                anchor_i.best_predecessor = Some(Box::new(anchor_j.clone()));
+                anchor_i.best_predecessor_id = Some(anchor_j.id);
             }
 
         }
@@ -266,50 +277,48 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
     let mut chains: Vec<Chain> = Vec::new();
 
-    // TODO: this does not work properly as Anchors should contain pointers
-    // to other Anchors
     if !anchors.is_empty() {
-
         let mut i = anchors.len() - 1;
 
         loop {
-            let mut a = anchors.get_mut(i).unwrap();
+            let mut a = anchors.get(i).unwrap();
 
-            if a.best_predecessor.is_some() && a.max_chain_score > seed_length as f64 {
+            if a.best_predecessor_id.is_some() && a.max_chain_score > seed_length as f64 {
                 let mut curr_chain = Chain::new();
+                curr_chain.anchors.push_back(a.clone());
                 curr_chain.score = a.max_chain_score;
 
-                loop {
-                    // First push the current anchor
-                    curr_chain.anchors.push_back(a.clone());
-
-                    // Then move backwards (predecessors)
-                    match a.best_predecessor {
-                        None => break,
-                        Some(ref mut b) => {
-                            a = b;
-                        }
-                    }
+                while let Some(b) = a.best_predecessor_id {
+                    curr_chain.anchors.push_back(anchors.get(b as usize).unwrap().clone());
+                    a = anchors.get(b as usize).unwrap();
                 }
 
-                for anchor in &mut curr_chain.anchors {
-                    anchor.best_predecessor = None;
+                // TODO: maybe can be done better
+                // Set best predecessors to None in anchors
+                for curr_anchor in &mut curr_chain.anchors {
+                    let id = curr_anchor.id;
+                    let original_anchor = anchors.get_mut(id as usize).unwrap();
+                    original_anchor.best_predecessor_id = None;
+
+                    // Just for safety -- curr_anchor and original anchor are the same
+                    // but in different places
+                    curr_anchor.best_predecessor_id = None;
                 }
 
                 if curr_chain.anchors.len() >= chain_min_n_anchors as usize {
                     curr_chain.anchors = VecDeque::from_iter(curr_chain.anchors.into_iter().rev());
-                    chains.push(curr_chain);
+                    chains.push(curr_chain.clone());
                 }
             }
 
-            if i != 0 {
+            // Decrease counter for next iteration
+            if i>0 {
                 i -= 1;
             } else {
-                // list is over
                 break;
             }
-        }
 
+        }
     }
 
     // ----- STEP 3: Identifying primary chains (= chains with little or no overlap on the query) -----
@@ -493,6 +502,16 @@ mod test {
         let index = Index::build(&graph, 3, 100,
                                  100, 7.0, None);
         let input_seq = InputSequence::from_string(&String::from("AAATTT"));
+        let anchors = anchors_for_query(&index, &input_seq);
+        assert_eq!(anchors.len(), 0)
+    }
+
+    #[test]
+    fn test_no_anchors_2() {
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100,
+                                 100, 7.0, None);
+        let input_seq = InputSequence::from_string(&String::from(""));
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
     }
