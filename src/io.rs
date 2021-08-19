@@ -30,7 +30,7 @@ impl InputSequence {
         let query_string = String::from(self.seq.clone());
 
         // Check if it's possible to obtain kmers (otherwise return empty vec)
-        if kmer_size < query_string.len() {
+        if kmer_size <= query_string.len() {
             //let end = self.seq.len() - kmer_size;
             for i in 0..(self.seq.len() - kmer_size + 1)  {
                 seq_kmers.push(String::from(
