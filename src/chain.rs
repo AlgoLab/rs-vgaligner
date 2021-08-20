@@ -237,7 +237,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // ----- STEP 1 : finding the optimal chaining scores -----
 
     // First sort the anchors by their ending position
-    anchors.sort_by(|a,b| a.target_end.cmp(&b.target_end));
+    anchors.par_sort_by(|a,b| a.target_end.cmp(&b.target_end));
 
     // Then, compute the maximal chaining score up to the current anchor.
     // This score is called f(i) in the paper.
@@ -274,6 +274,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
 
     }
 
+
     // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
     let mut chains: Vec<Chain> = Vec::new();
 
@@ -281,19 +282,29 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         let mut i = anchors.len() - 1;
 
         loop {
-            let mut a = anchors.get(i).unwrap();
+            let mut a = anchors.get_mut(i).unwrap();
 
             if a.best_predecessor_id.is_some() && a.max_chain_score > seed_length as f64 {
                 let mut curr_chain = Chain::new();
                 curr_chain.anchors.push_back(a.clone());
                 curr_chain.score = a.max_chain_score;
 
-                while let Some(b) = a.best_predecessor_id {
-                    curr_chain.anchors.push_back(anchors.get(b as usize).unwrap().clone());
-                    a = anchors.get(b as usize).unwrap();
+                let mut pred_id = a.best_predecessor_id;
+                a.best_predecessor_id = None;
+                loop {
+                    match pred_id {
+                        Some(b) => {
+                            let mut pred_anchor = anchors.get_mut(b as usize).unwrap();
+                            pred_id = pred_anchor.best_predecessor_id.clone();
+                            pred_anchor.best_predecessor_id = None;
+                            curr_chain.anchors.push_back(pred_anchor.clone());
+                        }
+                        None => break,
+                    }
                 }
 
-                // TODO: maybe can be done better
+                /*
+                // No longer necessary
                 // Set best predecessors to None in anchors
                 for curr_anchor in &mut curr_chain.anchors {
                     let id = curr_anchor.id;
@@ -304,6 +315,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
                     // but in different places
                     curr_anchor.best_predecessor_id = None;
                 }
+                 */
 
                 if curr_chain.anchors.len() >= chain_min_n_anchors as usize {
                     curr_chain.anchors = VecDeque::from_iter(curr_chain.anchors.into_iter().rev());
@@ -324,7 +336,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // ----- STEP 3: Identifying primary chains (= chains with little or no overlap on the query) -----
 
     // Sort the chains by score in reverse order (higher first)
-    chains.sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
+    chains.par_sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
 
     // Create the Interval Tree
     let mut interval_tree : ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
@@ -532,7 +544,6 @@ mod test {
         //println!("Chains length: {}", chains.len());
     }
 
-    /*
     #[test]
     fn test_chains_2() {
 
@@ -546,6 +557,10 @@ mod test {
         let input_seq = InputSequence::from_string(&String::from(index.seq_fwd.clone()));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
+        println!("Anchors len: {}", anchors.len());
+        println!("Anchors: {:#?}", anchors);
+        assert!(!anchors.is_empty());
+
         let chains: Vec<Chain> = chain_anchors(&mut anchors, index.kmer_length, 50,
                                                1000, 2, 0.5f64,
                                                0.1f64, 60.0f64);
@@ -553,7 +568,6 @@ mod test {
         //println!("Chains_2: {:#?}", chains);
         //println!("Chains_2 length: {}", chains.len());
     }
-     */
 
     #[test]
     fn test_no_chains() {
