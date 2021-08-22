@@ -67,8 +67,8 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
     let kmer_size = index.kmer_length as usize;
     let query_kmers : Vec<String> = query.split_into_kmers(kmer_size);
 
-    // Find anchors for each kmer in query
     let mut id : anchor_id = 0;
+    // Find anchors for each kmer in query
     for i in 0..query_kmers.len() {
         let kmer = query_kmers.get(i).unwrap();
         let ref_pos_vec = index.find_positions_for_query_kmer(&kmer.as_str());
@@ -83,7 +83,7 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
                             pos.start, pos.start_orient,
                             pos.end, pos.end_orient, id)
             );
-            id += 1;
+            id += 1
         }
 
         anchors.extend(anchors_for_kmer);
@@ -278,6 +278,8 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
     let mut chains: Vec<Chain> = Vec::new();
 
+    let mut debug_id : Vec<anchor_id> = Vec::new();
+
     if !anchors.is_empty() {
         let mut i = anchors.len() - 1;
 
@@ -285,37 +287,34 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
             let mut a = anchors.get_mut(i).unwrap();
 
             if a.best_predecessor_id.is_some() && a.max_chain_score > seed_length as f64 {
+
+                // Mark predecessor as None (-> a won't be used again)
+                let mut pred_id = a.best_predecessor_id.clone();
+                a.best_predecessor_id = None;
+
                 let mut curr_chain = Chain::new();
                 curr_chain.anchors.push_back(a.clone());
                 curr_chain.score = a.max_chain_score;
 
-                let mut pred_id = a.best_predecessor_id;
-                a.best_predecessor_id = None;
+                // Go back the best predecessors until a None is found
                 loop {
                     match pred_id {
                         Some(b) => {
+                            // Get the anchor relative to the best predecessor
                             let mut pred_anchor = anchors.get_mut(b as usize).unwrap();
-                            pred_id = pred_anchor.best_predecessor_id.clone();
-                            pred_anchor.best_predecessor_id = None;
-                            curr_chain.anchors.push_back(pred_anchor.clone());
+
+                            // Check if it has already been used (= its best predecessor is None)
+                            if pred_anchor.best_predecessor_id.is_none() {
+                                pred_id = None;
+                            } else {
+                                pred_id = pred_anchor.best_predecessor_id.clone();
+                                pred_anchor.best_predecessor_id = None;
+                                curr_chain.anchors.push_back(pred_anchor.clone());
+                            }
                         }
                         None => break,
                     }
                 }
-
-                /*
-                // No longer necessary
-                // Set best predecessors to None in anchors
-                for curr_anchor in &mut curr_chain.anchors {
-                    let id = curr_anchor.id;
-                    let original_anchor = anchors.get_mut(id as usize).unwrap();
-                    original_anchor.best_predecessor_id = None;
-
-                    // Just for safety -- curr_anchor and original anchor are the same
-                    // but in different places
-                    curr_anchor.best_predecessor_id = None;
-                }
-                 */
 
                 if curr_chain.anchors.len() >= chain_min_n_anchors as usize {
                     curr_chain.anchors = VecDeque::from_iter(curr_chain.anchors.into_iter().rev());
@@ -338,18 +337,25 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // Sort the chains by score in reverse order (higher first)
     chains.par_sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
 
+    /*
     // Create the Interval Tree
     let mut interval_tree : ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
     for chain in &chains {
         let query_begin = chain.anchors.front().unwrap().query_begin;
         let query_end = chain.anchors.back().unwrap().query_end;
-        interval_tree.insert((query_begin..query_end), chain.clone());
+
+        // TODO: review this, maybe query_begin should always be less than query_end?
+        if query_begin < query_end {
+            interval_tree.insert((query_begin..query_end), chain.clone());
+        }
+
     }
     interval_tree.index();
 
     // Find overlaps
     for mut chain in &mut chains {
-        if !chain.processed() {
+        // TODO: same as line 333
+        if !chain.processed() && chain.query_begin() < chain.query_end() {
             let chain_begin = chain.anchors.front().unwrap().query_begin;
             let chain_end = chain.anchors.back().unwrap().query_end;
             let chain_length = chain_end - chain_begin;
@@ -391,9 +397,20 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     for chain in &mut chains {
         chain.compute_boundaries(seed_length, mismatch_rate);
     }
+     */
 
     chains
 }
+
+pub fn extract_po_range(index : &Index, chains : &Vec<Chain>) {
+    let mut i : usize = 0;
+    for chain in chains {
+        println!("Chain {} has anchors {:#?}", i, chain.anchors.iter().map(|x| x.id).collect::<Vec<anchor_id>>());
+        i+=1;
+    }
+    println!();
+}
+
 
 /*
     GAF format
@@ -429,8 +446,8 @@ pub fn write_chain_gaf(chain : &Chain, index : &Index,
     let path_length: u64 = 0;
     // TODO: continue this + needs fixes (original impl)
     let second_half_gaf_line = format!("\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                                       "",
                                        path_length,
-                                       0,
                                        path_length,
                                        path_length,
                                        path_length,
@@ -557,8 +574,8 @@ mod test {
         let input_seq = InputSequence::from_string(&String::from(index.seq_fwd.clone()));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
-        println!("Anchors len: {}", anchors.len());
-        println!("Anchors: {:#?}", anchors);
+        //println!("Anchors len: {}", anchors.len());
+        //println!("Anchors: {:#?}", anchors);
         assert!(!anchors.is_empty());
 
         let chains: Vec<Chain> = chain_anchors(&mut anchors, index.kmer_length, 50,
@@ -581,6 +598,5 @@ mod test {
                                                0.1f64, 60.0f64);
         assert!(chains.is_empty());
     }
-
 
 }

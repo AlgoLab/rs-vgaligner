@@ -749,8 +749,8 @@ mod test {
                 // Since k=3, I will only make sure that at least the first and the last base are equal
                 //assert_eq!(kmer.seq, ref_substring); <- not guaranteed
 
-                println!("Kmer: {}", kmer.seq);
-                println!("Ref: {}\n", ref_substring);
+                //println!("Kmer: {}", kmer.seq);
+                //println!("Ref: {}\n", ref_substring);
 
                 assert_eq!(kmer.seq.chars().nth(0), ref_substring.chars().nth(0));
                 assert_eq!(kmer.seq.chars().nth(2), ref_substring.chars().nth(ref_substring.len()-1));
@@ -801,8 +801,8 @@ mod test {
             generate_pos_on_ref_2(&graph, &kmers_on_graph, &seq_length, &node_ref,
                                   &mut kmers_hashes, &mut kmers_start_offsets);
 
-        println!("Kmers hashes : {:#?}", kmers_hashes);
-        println!("Kmers start offsets : {:#?}", kmers_start_offsets);
+        //println!("Kmers hashes : {:#?}", kmers_hashes);
+        //println!("Kmers start offsets : {:#?}", kmers_start_offsets);
         assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
 
         let table: NoKeyBoomHashMap<u64, u64> =
