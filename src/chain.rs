@@ -24,17 +24,22 @@ type anchor_id = u64;
 /// - w = index.kmer_size
 #[derive(Clone, Debug)]
 pub struct Anchor {
+    // The id of the anchor
+    id : anchor_id,
+
+    // These are positions on the query (i.e. seqs in the .fa/.fq file)
     pub query_begin : u64,
     pub query_end : u64,
+
+    // These are positions on the graph linearization (position + fwd/rev)
     target_begin : u64,
     target_begin_orient : bool,
     target_end : u64,
     target_end_orient : bool,
-    max_chain_score : f64,
-    //best_predecessor : Option<Box<Anchor>>
-    id : anchor_id,
-    best_predecessor_id : Option<anchor_id>
 
+    // Values used during chaining
+    max_chain_score : f64,
+    best_predecessor_id : Option<anchor_id>
 }
 
 impl Anchor {
@@ -43,6 +48,7 @@ impl Anchor {
                target_end : u64, target_end_orient : bool,
                id : u64) -> Self {
         Anchor {
+            id,
             query_begin,
             query_end,
             target_begin,
@@ -50,7 +56,6 @@ impl Anchor {
             target_end,
             target_end_orient,
             max_chain_score : 0f64,
-            id,
             best_predecessor_id : None,
         }
     }
@@ -83,7 +88,7 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
                             pos.start, pos.start_orient,
                             pos.end, pos.end_orient, id)
             );
-            id += 1
+            id += 1;
         }
 
         anchors.extend(anchors_for_kmer);
@@ -95,6 +100,7 @@ pub(crate) fn anchors_for_query(index : &Index, query : &InputSequence) -> Vec<A
 /// Multiple anchors chained together to get a longer match
 #[derive(Debug, Clone)]
 pub struct Chain {
+    // A Chain is made up by one or more anchors
     pub anchors : VecDeque<Anchor>,
     score : f64,
     mapping_quality : f64,
@@ -278,8 +284,6 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // ----- STEP 2: Finding all the chains with no anchors used in multiple chains (backtracking) -----
     let mut chains: Vec<Chain> = Vec::new();
 
-    let mut debug_id : Vec<anchor_id> = Vec::new();
-
     if !anchors.is_empty() {
         let mut i = anchors.len() - 1;
 
@@ -337,7 +341,6 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     // Sort the chains by score in reverse order (higher first)
     chains.par_sort_by(|a,b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
 
-    /*
     // Create the Interval Tree
     let mut interval_tree : ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
     for chain in &chains {
@@ -358,7 +361,7 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
         if !chain.processed() && chain.query_begin() < chain.query_end() {
             let chain_begin = chain.anchors.front().unwrap().query_begin;
             let chain_end = chain.anchors.back().unwrap().query_end;
-            let chain_length = chain_end - chain_begin;
+            //let chain_length = chain_end - chain_begin;
             let mut best_secondary: Option<Chain> = None;
 
             let ovlp = interval_tree.find((chain_begin..chain_end));
@@ -397,18 +400,25 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     for chain in &mut chains {
         chain.compute_boundaries(seed_length, mismatch_rate);
     }
-     */
 
     chains
 }
 
-pub fn extract_po_range(index : &Index, chains : &Vec<Chain>) {
+pub fn extract_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequence) {
+
+    // TODO: use index bitvector to find the graph handle from the anchor
+    //index.seq_bv.
+
+    //let min_handle = chains.iter().map(|c| c.target_begin).min().unwrap();
+    //let max_handle = chains.iter().map(|c| c.target_end).max().unwrap();
     let mut i : usize = 0;
     for chain in chains {
-        println!("Chain {} has anchors {:#?}", i, chain.anchors.iter().map(|x| x.id).collect::<Vec<anchor_id>>());
+        println!("Chain: {:#?}", i);
+        println!("");
+        //println!("Chain {} has anchors {:#?}", i, chain.anchors.iter().map(|x| x.id).collect::<Vec<anchor_id>>());
         i+=1;
     }
-    println!();
+    println!("\n\n");
 }
 
 

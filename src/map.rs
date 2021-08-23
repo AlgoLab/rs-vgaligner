@@ -22,10 +22,10 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
     // the id is only relative to that specific seq_anchors
     //let mut start_id : anchor_id = 0;
 
-    for seq in inputs {
+    for query in inputs {
         // First find the anchors, aka exact matches between
         // seqs and kmers in the index
-        let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, seq);
+        let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
         
         // Chain close anchors together to find longer matches
         let seq_chains : Vec<Chain> = chain_anchors(&mut seq_anchors, index.kmer_length,bandwidth,
@@ -33,13 +33,13 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
                                          max_mismatch_rate, max_mapq);
 
         // Convert chains to strings and do the same
-        let curr_chains_gaf_strings : Vec<String> = chains
+        let curr_chains_gaf_strings : Vec<String> = seq_chains
             .iter()
-            .map(|chain| write_chain_gaf(chain, index, &seq.name, seq.seq.len()))
+            .map(|chain| write_chain_gaf(chain, index, &query.name, query.seq.len()))
             .collect();
 
         // Find partially ordered ranges implied by chains
-        extract_po_range(index, &seq_chains);
+        extract_po_range(index, &seq_chains, query);
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());

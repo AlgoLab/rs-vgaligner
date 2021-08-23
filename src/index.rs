@@ -31,7 +31,7 @@ pub struct Index {
     /// Reverse complemented sequence of the graph, for fast access during alignment
     seq_rev: String,
     /// Mark node starts in forward
-    seq_bv: BitVec,
+    pub seq_bv: BitVec,
     // lets us map between our seq vector and handles (when our input graph is compacted!)
     //seq_by_rank: BitVec,
     /// Edge count of the input graph
