@@ -362,6 +362,51 @@ impl Index {
 
     }
 
+    // ------- Bitvec operations -------
+
+    // Get in which node a certain position is
+    pub fn get_node_from_pos(&self, pos : usize, orient : bool) -> u64 {
+        let rank = self.get_bv_rank(pos) as u64;
+
+        let result = match orient {
+            true => rank,
+            false => self.seq_bv.len() - rank,
+        };
+
+        result
+    }
+
+    pub fn get_bv_rank(&self, pos : usize) -> usize {
+        assert!(pos < self.seq_bv.len() as usize);
+
+        let mut rank : usize = 0;
+        for i in 0..pos {
+            if self.seq_bv.get(i as u64) == true {
+                rank += 1;
+            }
+        }
+
+        rank
+    }
+
+    // Get where a certain node starts in the linearization
+    pub fn get_bv_select(&self, element_no : u64) -> usize {
+        let mut select : usize = 0;
+
+        for i in 0..self.seq_bv.len() {
+            if self.seq_bv.get(i) == true {
+                select += 1;
+            }
+            if select as u64 == element_no {
+                break;
+            }
+        }
+
+        select
+    }
+
+    // -------
+
 
 }
 

@@ -4,7 +4,7 @@ use substring::Substring;
 use std::cmp::min;
 use itertools::Unique;
 use std::collections::VecDeque;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use bio::data_structures::interval_tree::*;
 use core::cmp;
 use std::cmp::Ordering::Equal;
@@ -106,7 +106,9 @@ pub struct Chain {
     mapping_quality : f64,
     is_secondary : bool,
     target_begin : u64,
-    target_end : u64
+    target_begin_orient : bool,
+    target_end : u64,
+    target_end_orient : bool
 }
 
 impl PartialEq for Chain {
@@ -129,7 +131,9 @@ impl Chain {
             mapping_quality : f64::MIN,
             is_secondary : false,
             target_begin : 0,
+            target_begin_orient: true,
             target_end : 0,
+            target_end_orient : true
         }
     }
 
@@ -404,13 +408,14 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     chains
 }
 
-pub fn extract_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequence) {
+pub fn extract_graph_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequence) -> Range<u64> {
 
-    // TODO: use index bitvector to find the graph handle from the anchor
-    //index.seq_bv.
+    // TODO: review this, target begin/end may have not been set
+    let min_handle : u64 = chains.par_iter().map(|c| index.get_node_from_pos(c.target_begin as usize, c.target_begin_orient)).min().unwrap();
+    let max_handle : u64 = chains.par_iter().map(|c| index.get_node_from_pos(c.target_end as usize, c.target_end_orient)).max().unwrap();
 
-    //let min_handle = chains.iter().map(|c| c.target_begin).min().unwrap();
-    //let max_handle = chains.iter().map(|c| c.target_end).max().unwrap();
+    // TODO: should this return a Vec of ranges instead of a single one? (-> one for each chain)
+    /*
     let mut i : usize = 0;
     for chain in chains {
         println!("Chain: {:#?}", i);
@@ -419,6 +424,15 @@ pub fn extract_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequ
         i+=1;
     }
     println!("\n\n");
+     */
+
+    (min_handle..max_handle)
+}
+
+pub fn extract_query_subsequence(index : &Index, chains : &Vec<Chain>, query : &InputSequence) -> Vec<String> {
+    // TODO: add the ability to chose fwd/rev
+    let subseqs : Vec<String> = chains.par_iter().map(|c| index.seq_fwd.substring(c.query_begin() as usize, c.query_end() as usize).to_string()).collect();
+    subseqs
 }
 
 

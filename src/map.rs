@@ -1,6 +1,6 @@
 use crate::index::Index;
 use crate::io::InputSequence;
-use crate::chain::{Anchor, Chain, write_chain_gaf, anchors_for_query, chain_anchors, extract_po_range};
+use crate::chain::{Anchor, Chain, write_chain_gaf, anchors_for_query, chain_anchors, extract_graph_po_range};
 use std::fs::File;
 use std::io::Write;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelIterator};
@@ -39,7 +39,7 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
             .collect();
 
         // Find partially ordered ranges implied by chains
-        extract_po_range(index, &seq_chains, query);
+        extract_graph_po_range(index, &seq_chains, query);
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());
