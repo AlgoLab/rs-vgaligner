@@ -7,14 +7,14 @@ mod subcommands {
     pub mod map_main;
 }
 
+mod chain;
 pub mod dna;
 pub mod index;
-pub mod map;
 pub mod io;
 pub mod kmer;
+pub mod map;
 mod serialization;
 pub mod utils;
-mod chain;
 
 fn main() {
     let yaml = load_yaml!("./subcommands/cli.yml");
@@ -25,5 +25,4 @@ fn main() {
         Some("map") => subcommands::map_main::map_main(&matches),
         _ => println!("Missing subcommand, please add [index|map]"),
     }
-
 }

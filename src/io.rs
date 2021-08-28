@@ -1,40 +1,35 @@
-use std::io::{Result, BufReader};
-use std::io::prelude::*;
-use std::fs::File;
-use bstr::io::BufReadExt;
-use substring::Substring;
-use std::path::Path;
 use std::ffi::OsStr;
-use itertools::Itertools;
-use rayon::prelude::*;
-use std::io;
+use std::fs::File;
+
+use std::io::prelude::*;
+use std::io::{BufReader, Result};
+use std::path::Path;
+use substring::Substring;
 
 #[derive(PartialEq)]
 enum InputFileTypes {
     Fasta,
-    Fastq
+    Fastq,
 }
 
 #[derive(Debug)]
 pub struct InputSequence {
-    pub name : String,
-    pub seq : String
+    pub name: String,
+    pub seq: String,
 }
 
 impl InputSequence {
-
     // TODO: maybe an Option return type would be better
-    pub fn split_into_kmers(&self, kmer_size : usize) -> Vec<String> {
-        let mut seq_kmers : Vec<String> = Vec::new();
+    pub fn split_into_kmers(&self, kmer_size: usize) -> Vec<String> {
+        let mut seq_kmers: Vec<String> = Vec::new();
 
-        let query_string = String::from(self.seq.clone());
+        let query_string = self.seq.clone();
 
         // Check if it's possible to obtain kmers (otherwise return empty vec)
         if kmer_size <= query_string.len() {
             //let end = self.seq.len() - kmer_size;
-            for i in 0..(self.seq.len() - kmer_size + 1)  {
-                seq_kmers.push(String::from(
-                    query_string.substring(i,i+kmer_size)));
+            for i in 0..(self.seq.len() - kmer_size + 1) {
+                seq_kmers.push(String::from(query_string.substring(i, i + kmer_size)));
             }
             //println!("Query kmers: {:#?}", seq_kmers);
         }
@@ -42,42 +37,41 @@ impl InputSequence {
         seq_kmers
     }
 
-    pub fn from_string(seq : &String) -> Self{
+    pub fn from_string(seq: &str) -> Self {
         InputSequence {
-            name : String::from(""),
-            seq : seq.clone()
+            name: String::from(""),
+            seq: seq.to_string().clone(),
         }
     }
 }
 
 /// Parse a fasta/fastq file and returns the list of sequences from the given file
-pub fn read_seqs_from_file(filename : &str) -> Result<Vec<InputSequence>> {
-    let mut seqs : Vec<InputSequence> = Vec::new();
+pub fn read_seqs_from_file(filename: &str) -> Result<Vec<InputSequence>> {
+    let mut seqs: Vec<InputSequence> = Vec::new();
 
-    let mut file = File::open(filename)?;
+    let file = File::open(filename)?;
     let mut lines = BufReader::new(file).lines().peekable();
 
     // Check file type
-    let file_type : InputFileTypes;
+    let file_type: InputFileTypes;
     let file_extension = Path::new(filename).extension().and_then(OsStr::to_str);
     match file_extension {
         Some("fasta") | Some("fa") => file_type = InputFileTypes::Fasta,
         Some("fastq") | Some("fq") => file_type = InputFileTypes::Fastq,
-        _ => panic!("Unrecognized file type")
+        _ => panic!("Unrecognized file type"),
     }
 
     // Then parse the file itself
     if file_type == InputFileTypes::Fasta {
         while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
-                let name: String = String::from(
-                    name_long.substring(1, name_long.len())
-                );
-                seqs.push(InputSequence { name, seq });
+            let name: String = String::from(name_long.substring(1, name_long.len()));
+            seqs.push(InputSequence { name, seq });
         }
     } else if file_type == InputFileTypes::Fastq {
         while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
-        (lines.next(), lines.next(), lines.next(), lines.next()) {
-                seqs.push(InputSequence { name, seq });
+            (lines.next(), lines.next(), lines.next(), lines.next())
+        {
+            seqs.push(InputSequence { name, seq });
         }
     }
 
@@ -117,5 +111,4 @@ mod test {
         let seq_kmers = test_seq.split_into_kmers(4);
         assert_eq!(seq_kmers.len(), 0);
     }
-
 }

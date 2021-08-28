@@ -33,10 +33,10 @@ fn switch_base(c: char) -> char {
 }
 
 fn is_dna(base: char) -> bool {
-    match base {
-        'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U' | 'u' | 'N' => true,
-        _ => false,
-    }
+    matches!(
+        base,
+        'A' | 'a' | 'C' | 'c' | 'G' | 'g' | 'T' | 't' | 'U' | 'u' | 'N'
+    )
 }
 
 #[test]

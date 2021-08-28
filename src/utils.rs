@@ -80,7 +80,7 @@ pub fn find_forward_sequence_bfs(graph: &HashGraph, seq_bv: &mut BitVec) -> Stri
 pub fn find_forward_sequence(
     graph: &HashGraph,
     seq_bv: &mut BitVec,
-    node_ref: &mut Vec<NodeRef>
+    node_ref: &mut Vec<NodeRef>,
 ) -> String {
     let mut forward: String = String::new();
     let mut bv_pos: u64 = 0;

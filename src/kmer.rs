@@ -14,7 +14,6 @@ use substring::Substring;
 
 use crate::serialization::SerializableHandle;
 use crate::utils::NodeRef;
-use std::ops::{Index, Deref};
 use rayon::prelude::ParallelSliceMut;
 
 // TODO (at the end): use in KmerPos instead of separate pos+orient for begin and end
@@ -152,7 +151,7 @@ pub fn generate_kmers(
                 // has size >= k
                 if (kmer.seq.len() as u64) == k {
                     //if !complete_kmers.contains(&kmer) {
-                        complete_kmers.push(kmer);
+                    complete_kmers.push(kmer);
                     //}
                 } else {
                     // The kmer is incomplete, thus will have to be completed to reach size k
@@ -173,7 +172,6 @@ pub fn generate_kmers(
                         || (degree_max.is_some() && next_count < degree_max.unwrap())
                         || (edge_max.is_some() && kmer.forks < edge_max.unwrap())
                     {
-
                         // Create a copy of the incomplete kmer for each neighbour handle,
                         // so that they can be completed
 
@@ -208,7 +206,7 @@ pub fn generate_kmers(
 
                 if (incomplete_kmer.seq.len() as u64) == k {
                     //if !complete_kmers.contains(&incomplete_kmer) {
-                        complete_kmers.push(incomplete_kmer);
+                    complete_kmers.push(incomplete_kmer);
                     //}
                 } else {
                     // NOTE: if there is no neighbor, the kmer does not get re-added
@@ -250,7 +248,7 @@ pub fn generate_kmers(
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
     // Note that the same kmer can appear in different places
     // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
-    complete_kmers.par_sort_by(|x,y| x.seq.cmp(&y.seq));
+    complete_kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     complete_kmers.dedup();
@@ -270,8 +268,8 @@ pub fn generate_kmers_linearly(
     assert!(!graph.paths.is_empty());
 
     // This requires two iterations, one on the forward (handles) and one on the reverse (handles).
-    let mut forward_kmers = generate_kmers_linearly_forward(graph, k, edge_max, degree_max);
-    let mut reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
+    let forward_kmers = generate_kmers_linearly_forward(graph, k, edge_max, degree_max);
+    let reverse_kmers = generate_kmers_linearly_reverse(graph, k, edge_max, degree_max);
 
     // Merge the kmers obtained previously
     let mut kmers = merge_kmers(forward_kmers, reverse_kmers);
@@ -279,7 +277,7 @@ pub fn generate_kmers_linearly(
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
     // Note that the same kmer can appear in different places
     // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
-    kmers.par_sort_by(|x,y| x.seq.cmp(&y.seq));
+    kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     kmers.dedup();
@@ -328,7 +326,7 @@ fn generate_kmers_linearly_forward(
 
                 if (incomplete_kmer.seq.len() as u64) == k {
                     //if !kmers.contains(&incomplete_kmer) {
-                        kmers.push(incomplete_kmer);
+                    kmers.push(incomplete_kmer);
                     //}
                 } else {
                     curr_kmers_to_complete.push(incomplete_kmer);
@@ -358,7 +356,7 @@ fn generate_kmers_linearly_forward(
 
                 if (kmer.seq.len() as u64) == k {
                     //if !kmer.seq.contains('N') && !kmers.contains(&kmer) {
-                        kmers.push(kmer);
+                    kmers.push(kmer);
                     //}
                 } else {
                     curr_kmers_to_complete.push(kmer);
@@ -421,7 +419,7 @@ pub fn generate_kmers_linearly_reverse(
 
                 if (incomplete_kmer.seq.len() as u64) == k {
                     //if !kmers.contains(&incomplete_kmer) {
-                        kmers.push(incomplete_kmer);
+                    kmers.push(incomplete_kmer);
                     //}
                 } else {
                     curr_kmers_to_complete.push(incomplete_kmer);
@@ -451,7 +449,7 @@ pub fn generate_kmers_linearly_reverse(
 
                 if (kmer.seq.len() as u64) == k {
                     //if !kmers.contains(&kmer) {
-                        kmers.push(kmer);
+                    kmers.push(kmer);
                     //}
                 } else {
                     curr_kmers_to_complete.push(kmer);
@@ -474,7 +472,7 @@ fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
 
     for kmer in kmers_rev {
         //if !kmers.contains(&kmer) {
-            kmers.push(kmer);
+        kmers.push(kmer);
         //}
     }
 
@@ -492,8 +490,7 @@ pub struct KmerPos {
     /// The end position of the kmer
     pub(crate) end: u64,
     /// The orientation of the kmer
-    pub(crate) end_orient: bool,    // false = fwd, true = rev
-
+    pub(crate) end_orient: bool, // false = fwd, true = rev
 }
 
 /// Obtain the position of a given handle in the serialized forward/reverse
@@ -553,7 +550,7 @@ pub fn generate_pos_on_ref(
             start: start_ref,
             end: end_ref,
             start_orient: !kmer.first.is_reverse(),
-            end_orient: !kmer.last.is_reverse()
+            end_orient: !kmer.last.is_reverse(),
         };
         kmers_on_ref.push(pos);
     }
@@ -576,10 +573,9 @@ pub fn generate_pos_on_ref_2(
     // Hash builder to generate hashes
     //let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
     let mut last_kmer: Option<String> = None;
-    let mut curr_kmer_positions : Vec<KmerPos> = Vec::new();
+    let mut curr_kmer_positions: Vec<KmerPos> = Vec::new();
 
     for kmer in kmers_on_graph {
-
         let first_handle_of_kmer = kmer.first;
         let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
         let first_handle_length = first_handle_node.sequence.len();
@@ -605,7 +601,7 @@ pub fn generate_pos_on_ref_2(
             start: start_ref,
             end: end_ref,
             start_orient: !kmer.first.is_reverse(),
-            end_orient: !kmer.last.is_reverse()
+            end_orient: !kmer.last.is_reverse(),
         };
 
         last_kmer = match last_kmer {
@@ -613,20 +609,19 @@ pub fn generate_pos_on_ref_2(
             None => {
                 curr_kmer_positions.push(pos);
                 Some(kmer.clone().seq)
-            },
+            }
             Some(last_kmer) => {
                 // If the kmer has changed, push the hash of the previous one and the
                 // list of positions
                 if last_kmer != kmer.seq {
-                    let kmer_hash  = generate_hash(&last_kmer);
+                    let kmer_hash = generate_hash(&last_kmer);
                     hashes.push(kmer_hash);
 
                     // Push the positions of the current kmer
                     kmers_on_ref.push(curr_kmer_positions.clone());
 
                     // Start with new value
-                    curr_kmer_positions = Vec::new();
-                    curr_kmer_positions.push(pos);
+                    curr_kmer_positions = vec![pos];
                     Some(kmer.clone().seq)
                 } else {
                     // if the kmer has not changed, just add it to the list of positions
@@ -637,11 +632,10 @@ pub fn generate_pos_on_ref_2(
         };
 
         if kmer == kmers_on_graph.last().unwrap() {
-            let kmer_hash  = generate_hash(&kmer.seq);
+            let kmer_hash = generate_hash(&kmer.seq);
             hashes.push(kmer_hash);
             kmers_on_ref.push(curr_kmer_positions.clone());
         }
-
     }
 
     // sort each kmer's positions
@@ -649,7 +643,7 @@ pub fn generate_pos_on_ref_2(
     for positions_list in &mut kmers_on_ref {
         //println!("Unsorted positions: {:#?}", positions_list);
         //positions_list.dedup();
-        positions_list.par_sort_by(|x,y| match x.start_orient.cmp(&y.start_orient) {
+        positions_list.par_sort_by(|x, y| match x.start_orient.cmp(&y.start_orient) {
             Ordering::Equal => x.start.cmp(&y.start),
             other => other,
         });
@@ -665,8 +659,8 @@ pub fn generate_pos_on_ref_2(
     // and [0, n ...] <- offset where each kmer start)
     // this is coherent with the original C++ implementation
 
-    let mut kmers_on_ref_flattened : Vec<KmerPos> = Vec::new();
-    let mut offset : u64 = 0;
+    let mut kmers_on_ref_flattened: Vec<KmerPos> = Vec::new();
+    let mut offset: u64 = 0;
 
     for positions_list in kmers_on_ref {
         kmers_start_offsets.push(offset);
@@ -681,7 +675,7 @@ pub fn generate_pos_on_ref_2(
             start: u64::MAX,
             end: u64::MAX,
             start_orient: false, //Doesn't really matter, will only check max_value
-            end_orient: false  //Doesn't really matter, will only check max_value
+            end_orient: false,   //Doesn't really matter, will only check max_value
         };
         kmers_on_ref_flattened.push(delimiter);
         offset += 1;
