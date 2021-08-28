@@ -29,7 +29,7 @@ pub struct Index {
     /// Forward sequence of the graph, stored here for fast access during alignment
     pub(crate) seq_fwd: String,
     /// Reverse complemented sequence of the graph, for fast access during alignment
-    seq_rev: String,
+    pub(crate) seq_rev: String,
     /// Mark node starts in forward
     pub seq_bv: BitVec,
     // lets us map between our seq vector and handles (when our input graph is compacted!)

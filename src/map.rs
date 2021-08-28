@@ -39,7 +39,7 @@ pub fn map_reads(index : &Index, inputs : &Vec<InputSequence>,
             .collect();
 
         // Find partially ordered ranges implied by chains
-        extract_graph_po_range(index, &seq_chains, query);
+        extract_graph_po_range(index, &seq_chains);
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());

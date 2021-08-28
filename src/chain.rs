@@ -408,31 +408,67 @@ pub fn chain_anchors(anchors : &mut Vec<Anchor>, seed_length : u64, bandwidth : 
     chains
 }
 
-pub fn extract_graph_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequence) -> Range<u64> {
+/*
+pub fn extract_graph_po_range(index : &Index, chains : &Vec<Chain>, query : &InputSequence) -> Vec<Range<u64>> {
+    let mut start_end_vec : Vec<Range<u64>> = Vec::new();
 
-    // TODO: review this, target begin/end may have not been set
-    let min_handle : u64 = chains.par_iter().map(|c| index.get_node_from_pos(c.target_begin as usize, c.target_begin_orient)).min().unwrap();
-    let max_handle : u64 = chains.par_iter().map(|c| index.get_node_from_pos(c.target_end as usize, c.target_end_orient)).max().unwrap();
-
-    // TODO: should this return a Vec of ranges instead of a single one? (-> one for each chain)
-    /*
-    let mut i : usize = 0;
     for chain in chains {
-        println!("Chain: {:#?}", i);
-        println!("");
-        //println!("Chain {} has anchors {:#?}", i, chain.anchors.iter().map(|x| x.id).collect::<Vec<anchor_id>>());
-        i+=1;
-    }
-    println!("\n\n");
-     */
+        let min_node = chain.anchors.par_iter()
+                                    .map(|a| index.get_node_from_pos(a.target_begin as usize, a.target_begin_orient))
+                                    .min().unwrap();
 
-    (min_handle..max_handle)
+        let max_node = chain.anchors.par_iter()
+                                    .map(|a| index.get_node_from_pos(a.target_end as usize, a.target_end_orient))
+                                    .max().unwrap();
+
+        start_end_vec.push(min_node..max_node);
+    }
+
+    start_end_vec
+}
+ */
+
+/// Find the leftmost starting node(handle) and rightmost node(handle) for each chain
+pub fn extract_graph_po_range(index : &Index, chains : &Vec<Chain>) -> Vec<Range<u64>> {
+    let mut start_end_vec : Vec<Range<u64>> = chains.par_iter()
+                                                    .map(|c| find_range_single_chain(index, c))
+                                                    .collect();
+
+    start_end_vec
+}
+
+fn find_range_single_chain(index : &Index, chain : &Chain) -> Range<u64> {
+    let min_node = chain.anchors.par_iter()
+        .map(|a| index.get_node_from_pos(a.target_begin as usize, a.target_begin_orient))
+        .min().unwrap();
+
+    let max_node = chain.anchors.par_iter()
+        .map(|a| index.get_node_from_pos(a.target_end as usize, a.target_end_orient))
+        .max().unwrap();
+
+    (min_node..max_node)
 }
 
 pub fn extract_query_subsequence(index : &Index, chains : &Vec<Chain>, query : &InputSequence) -> Vec<String> {
-    // TODO: add the ability to chose fwd/rev
-    let subseqs : Vec<String> = chains.par_iter().map(|c| index.seq_fwd.substring(c.query_begin() as usize, c.query_end() as usize).to_string()).collect();
+    let subseqs : Vec<String> = chains.par_iter()
+                                      .map(|c| extract_single_subsequence(index,
+                                                                          c.target_begin as usize, c.target_begin_orient,
+                                                                          c.target_end as usize, c.target_end_orient))
+                                      .collect();
     subseqs
+}
+
+fn extract_single_subsequence(index: &Index, begin: usize, begin_orient: bool, end: usize, end_orient: bool) -> String {
+    let substring = match (begin_orient, end_orient) {
+        (true, true) => index.seq_fwd.substring(begin, end).to_string(),
+        (false, false) => index.seq_rev.substring(begin, end).to_string(),
+
+        // TODO: this is 100% not right, maybe I should take a part from fwd and another from rev?
+        _ => index.seq_fwd.substring(begin, end).to_string(),
+
+    };
+
+    substring
 }
 
 
