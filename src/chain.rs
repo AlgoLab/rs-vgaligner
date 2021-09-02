@@ -12,6 +12,9 @@ use std::iter::FromIterator;
 use std::ops::Range;
 use substring::Substring;
 
+use ab_poa::abpoa_wrapper::*;
+use handlegraph::hashgraph::HashGraph;
+
 // Instead of using pointers like in the original implementation,
 // now each Anchor has an id, and the best predecessor is
 // identified by its id
@@ -510,6 +513,75 @@ fn extract_single_subsequence(
     11      int     Alignment block length
     12      int     Mapping quality (0-255; 255 for missing)
 */
+struct GAFAlignment {
+    query_name: String,
+    query_length: u64,
+    query_start: u64,
+    query_end: u64,
+    strand: char,
+    path_matching: String,
+    path_length: u64,
+    path_start: u64,
+    path_end: u64,
+    residue: u64,
+    alignment_block_length: u64,
+    mapping_quality: u64,
+}
+
+impl GAFAlignment {
+    fn to_string(&self) -> String {
+        format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            self.query_name, self.query_length, self.query_start, self.query_end, self.strand,
+            self.path_matching, self.path_length, self.path_start, self.path_end, self.residue,
+            self.alignment_block_length, self.mapping_quality
+        )
+    }
+}
+
+fn obtain_base_level_alignment(index: &Index, chain: &Chain, graph: &HashGraph, query: &str) -> GAFAlignment {
+    let po_range = find_range_single_chain(index, chain);
+
+    let (nodes, edges) = find_nodes_edges(&graph, &po_range);
+    let subquery = extract_single_subsequence(index, chain.target_begin as usize, chain.target_begin_orient, chain.target_end as usize, chain.target_end_orient);
+
+    let mut result = AbpoaAlignmentResult::new();
+    unsafe {
+        result = align_with_poa(&nodes, &edges, subquery.as_str());
+    }
+
+    // TODO: fix this
+    GAFAlignment {
+        query_name: "".to_string(),
+        query_length: 0,
+        query_start: 0,
+        query_end: 0,
+        strand: '+',
+        path_matching: "".to_string(),
+        path_length: 0,
+        path_start: 0,
+        path_end: 0,
+        residue: 0,
+        alignment_block_length: 0,
+        mapping_quality: 0
+    }
+}
+
+//TODO: complete this
+fn find_nodes_edges<'a>(graph: &'a HashGraph, po_range: &'a Range<u64>) -> (Vec<&'a str>, Vec<(usize, usize)>) {
+    let nodes : Vec<&str> = Vec::new();
+    let edges : Vec<(usize, usize)> = Vec::new();
+
+    (nodes, edges)
+}
+
+unsafe fn align_with_poa(nodes: &Vec<&str>, edges: &Vec<(usize,usize)>, query: &str) -> AbpoaAlignmentResult {
+    let mut aligner = AbpoaAligner::new_with_example_params();
+    aligner.add_nodes_edges(nodes, edges);
+    let res = aligner.align_sequence(query);
+    res
+}
+
 /// Convert a chain to a string in GAF (Graph Alignment Format)
 pub fn write_chain_gaf(
     chain: &Chain,
@@ -526,7 +598,7 @@ pub fn write_chain_gaf(
     let path_length: u64 = 0;
     // TODO: continue this + needs fixes (original impl)
     let second_half_gaf_line = format!(
-        "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
         "",
         path_length,
         path_length,
