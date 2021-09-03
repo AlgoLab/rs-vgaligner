@@ -5,7 +5,7 @@ version = 3
 [[package]]
 name = "ab_poa"
 version = "0.1.0"
-source = "git+https://github.com/HopedWall/rs-abPOA#75c26056ff7c040bc58b9b514b2cefe2a42a43d4"
+source = "git+https://github.com/HopedWall/rs-abPOA#7d884b8b9c5eff12967af53c1a85ada825e822e8"
 dependencies = [
  "bindgen",
 ]

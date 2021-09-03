@@ -4,8 +4,14 @@ use crate::chain::{
 use crate::index::Index;
 use crate::io::InputSequence;
 
+use handlegraph::hashgraph::HashGraph;
+use rayon::prelude::IntoParallelRefIterator;
 use std::fs::File;
 use std::io::Write;
+
+use crate::chain::obtain_base_level_alignment;
+use crate::chain::GAFAlignment;
+use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
 // TODO: add explaination to other parameters
@@ -49,12 +55,20 @@ pub fn map_reads(
 
         // Convert chains to strings and do the same
         let curr_chains_gaf_strings: Vec<String> = seq_chains
-            .iter()
+            .par_iter()
             .map(|chain| write_chain_gaf(chain, index, &query.name, query.seq.len()))
             .collect();
 
-        // Find partially ordered ranges implied by chains
-        extract_graph_po_range(index, &seq_chains);
+        // POA stuff
+        // TODO: fix HashGraph, index needs to store edges
+        /*
+        let alignments: Vec<GAFAlignment> = seq_chains
+            .par_iter()
+            .map(|chain| {
+                obtain_base_level_alignment(index, chain, &HashGraph::new(), query.seq.as_str())
+            })
+            .collect();
+         */
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());
