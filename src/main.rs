@@ -2,18 +2,27 @@
 extern crate clap;
 use clap::App;
 
+// Subcommands
 mod subcommands {
     pub mod index_main;
     pub mod map_main;
 }
 
-mod chain;
-pub mod dna;
+// Main program logic
+pub mod align;
 pub mod index;
-pub mod io;
-pub mod kmer;
 pub mod map;
+
+// Main data structures used
+pub mod chain;
+pub mod kmer;
+
+// Io
+pub mod io;
 mod serialization;
+
+// Utils
+pub mod dna;
 pub mod utils;
 
 fn main() {

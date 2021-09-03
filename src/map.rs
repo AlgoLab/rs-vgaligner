@@ -1,6 +1,4 @@
-use crate::chain::{
-    anchors_for_query, chain_anchors, extract_graph_po_range, write_chain_gaf, Anchor, Chain,
-};
+use crate::chain::{anchors_for_query, chain_anchors, write_chain_gaf, Anchor, Chain};
 use crate::index::Index;
 use crate::io::InputSequence;
 
@@ -9,8 +7,6 @@ use rayon::prelude::IntoParallelRefIterator;
 use std::fs::File;
 use std::io::Write;
 
-use crate::chain::obtain_base_level_alignment;
-use crate::chain::GAFAlignment;
 use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
