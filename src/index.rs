@@ -5,7 +5,7 @@ use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
 
 use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
-use handlegraph::handle::Edge;
+use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use rayon::prelude::ParallelSliceMut;
@@ -34,7 +34,7 @@ pub struct Index {
     n_edges: u64,
     // what's the most-efficient graph topology we can store?
     /// Edges of the input graph
-    edges: Vec<Edge>,
+    edges: Vec<Handle>,
     /// Node count of the input graph
     n_nodes: u64,
     // refer to ranges in edges
@@ -49,7 +49,7 @@ pub struct Index {
     /// Number of kmer positions in the index (note that since a kmer can appear multiple times,
     /// so the following will always hold: n_kmer_pos >= n_kmers)
     n_kmer_pos: u64,
-    /// The kmer hash table. This is a map that has as keys the unique kmer hashes (also found
+    /// The kmer hash tablegraph_edges. This is a map that has as keys the unique kmer hashes (also found
     /// in [`kmer_pos_ref`], and as values the starting index in [`kmer_pos_table`]
     bhpf: NoKeyBoomHashMap<u64, u64>,
     // our kmer reference table (maps from bphf to index in kmer_pos_vec)
@@ -108,12 +108,17 @@ impl Index {
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
         // Store edges
-        let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
-        //let mut graph_edges: Vec<Edge> = graph.edges_par().collect();
-        graph_edges.par_sort();
+        let mut graph_edges: Vec<Handle> = Vec::new();
+        let mut n_edges: u64 = 0;
 
         // Get the forward and reverse encoded by the linearized graph
-        let seq_fwd = find_forward_sequence(graph, &mut seq_bv, &mut node_ref);
+        let seq_fwd = find_forward_sequence(
+            graph,
+            &mut seq_bv,
+            &mut node_ref,
+            &mut graph_edges,
+            &mut n_edges,
+        );
         let seq_rev = reverse_complement(&seq_fwd.as_str());
 
         // Generate the kmers from the graph, and obtain graph-based positions.
@@ -191,7 +196,7 @@ impl Index {
             seq_rev,
             seq_bv,
             //seq_by_rank: Default::default(),
-            n_edges: graph_edges.len() as u64,
+            n_edges,
             edges: graph_edges,
             n_nodes: number_nodes,
             node_ref,
@@ -470,7 +475,8 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let _forward =
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0);
 
         let kmers_graph = generate_kmers(&graph, 3, Some(100), Some(100));
 
@@ -496,7 +502,8 @@ mod test {
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
 
-        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let _forward =
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0);
 
         let mut kmers_graph_dozyg = generate_kmers(&graph, 3, Some(100), Some(100));
         let mut kmers_graph_rust_ver = generate_kmers_linearly(&graph, 3, Some(100), Some(100));
@@ -526,7 +533,7 @@ mod test {
         assert_eq!(total_length, 8);
         assert_eq!(
             "ACTGAGCA",
-            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref)
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0)
         );
 
         use bv::*;
@@ -537,7 +544,7 @@ mod test {
             seq_bv
         );
 
-        assert_eq!(node_ref.len(), 4);
+        assert_eq!(node_ref.len(), 5);
 
         assert_eq!(
             *node_ref.get(0).unwrap(),
@@ -559,7 +566,7 @@ mod test {
             *node_ref.get(2).unwrap(),
             NodeRef {
                 seq_idx: 3,
-                edge_idx: 3,
+                edge_idx: 4,
                 edges_to_node: 1
             }
         );
@@ -567,8 +574,16 @@ mod test {
             *node_ref.get(3).unwrap(),
             NodeRef {
                 seq_idx: 5,
-                edge_idx: 4,
+                edge_idx: 6,
                 edges_to_node: 2
+            }
+        );
+        assert_eq!(
+            *node_ref.get(4).unwrap(),
+            NodeRef {
+                seq_idx: 8,
+                edge_idx: 8,
+                edges_to_node: 0
             }
         );
     }
@@ -611,7 +626,8 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let forward =
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0);
 
         assert_eq!(total_length, 8);
         assert_eq!("ACGTTTCA", forward);
@@ -627,7 +643,7 @@ mod test {
             *node_ref.get(2).unwrap(),
             NodeRef {
                 seq_idx: 6,
-                edge_idx: 2,
+                edge_idx: 3,
                 edges_to_node: 1
             }
         );
@@ -716,9 +732,8 @@ mod test {
     fn test_table() {
         let graph = create_simple_graph();
 
-        let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
-        //let mut graph_edges: Vec<Edge> = graph.edges_par().collect();
-        graph_edges.par_sort();
+        let mut graph_edges: Vec<Handle> = Vec::new();
+        let mut n_edges: u64 = 0;
 
         // Get the number of nodes in the graph
         let number_nodes = graph.graph.len() as u64;
@@ -728,7 +743,13 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let seq_fwd = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let seq_fwd = find_forward_sequence(
+            &graph,
+            &mut seq_bv,
+            &mut node_ref,
+            &mut graph_edges,
+            &mut n_edges,
+        );
         let seq_rev = reverse_complement(&seq_fwd);
 
         let seq_fwd2 = seq_fwd.clone();
@@ -825,7 +846,8 @@ mod test {
         let total_length = find_graph_seq_length(&graph);
         let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
         let mut node_ref: Vec<NodeRef> = Vec::new();
-        let _forward = find_forward_sequence(&graph, &mut seq_bv, &mut node_ref);
+        let _forward =
+            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0);
 
         // Check node_ref serialization
         let encoded_node_ref = bincode::serialize(&node_ref).unwrap();

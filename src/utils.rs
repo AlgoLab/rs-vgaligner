@@ -1,10 +1,13 @@
 use std::collections::VecDeque;
 
+use bstr::{ByteSlice, ByteVec};
 use bv::*;
 use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Edge, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::{IntoParallelRefIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 
 /// Additional data about each node, to be used together with seq_bv
@@ -81,6 +84,8 @@ pub fn find_forward_sequence(
     graph: &HashGraph,
     seq_bv: &mut BitVec,
     node_ref: &mut Vec<NodeRef>,
+    graph_edges: &mut Vec<Handle>,
+    n_edges: &mut u64,
 ) -> String {
     let mut forward: String = String::new();
     let mut bv_pos: u64 = 0;
@@ -88,46 +93,56 @@ pub fn find_forward_sequence(
 
     // Sort both handles and edges since this is a PO
     let mut graph_handles: Vec<Handle> = graph.handles_iter().collect();
-    graph_handles.sort();
-
-    let mut graph_edges: Vec<Edge> = graph.edges_iter().collect();
-    graph_edges.sort();
+    graph_handles.par_sort();
 
     // Iterate over the handles
     for current_handle in graph_handles {
         // Find the sequence
-        let curr_node_id = current_handle.id();
-        let curr_node = graph.get_node(&curr_node_id).unwrap();
-        forward.push_str(curr_node.sequence.to_string().as_str());
+        let curr_seq = graph.sequence(current_handle).into_string_lossy();
+        forward.push_str(curr_seq.as_str());
 
-        // Create nodeRef
-        let incoming_edges: u64 = graph
+        // Find nodes at the left of current node
+        let left_edges_handles: Vec<Handle> = graph
             .handle_edges_iter(current_handle, Direction::Left)
-            .count() as u64;
+            .collect();
+        let left_edges_count = left_edges_handles.par_iter().count();
+
+        // Create node_ref
         let curr_node_ref = NodeRef {
             seq_idx: bv_pos,
-            edge_idx: edge_pos,
-            edges_to_node: incoming_edges,
+            edge_idx: *n_edges,
+            edges_to_node: left_edges_count as u64,
         };
         node_ref.push(curr_node_ref);
 
-        // Advance the edge position so that it points to edges
-        // relative to the next handle
-        while edge_pos < graph_edges.len() as u64 {
-            let curr_edge = graph_edges.get(edge_pos as usize).unwrap();
-            if curr_edge.0 != current_handle {
-                break;
-            }
-            edge_pos += 1;
-        }
+        // Add left handles to graph_edges
+        graph_edges.extend(left_edges_handles);
+        *n_edges += left_edges_count as u64;
+
+        // Find nodes at the right of current node
+        let right_edges_handles: Vec<Handle> = graph
+            .handle_edges_iter(current_handle, Direction::Right)
+            .collect();
+        let right_edges_count = right_edges_handles.par_iter().count();
+        // Add right handles to graph_edges
+        graph_edges.extend(right_edges_handles);
+        *n_edges += right_edges_count as u64;
 
         // Set bitvector
         seq_bv.set(bv_pos, true); //end marker
-        bv_pos += curr_node.sequence.to_string().len() as u64;
+        bv_pos += curr_seq.to_string().len() as u64;
     }
 
     // Set end marker for bitvector
     seq_bv.set(bv_pos, true);
+
+    // Set end marker for edges
+    let last_node_ref = NodeRef {
+        seq_idx: bv_pos,
+        edge_idx: *n_edges,
+        edges_to_node: 0,
+    };
+    node_ref.push(last_node_ref);
 
     forward
 }
