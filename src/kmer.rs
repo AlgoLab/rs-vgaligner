@@ -14,32 +14,94 @@ use substring::Substring;
 
 use crate::serialization::SerializableHandle;
 use crate::utils::NodeRef;
-use rayon::prelude::ParallelSliceMut;
+use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
 
-// TODO (at the end): use in KmerPos instead of separate pos+orient for begin and end
+use rayon::iter::ParallelIterator;
+
+#[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
+// Forward is 0 in dozyg, Rev is 1
+pub enum SeqOrient {
+    Forward,
+    Reverse,
+}
 /*
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct SeqPos {
-    orient : bool,
-    position : u64
+impl Ord for SeqOrient {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (SeqOrient::Forward, SeqOrient::Forward) => Ordering::Equal,
+            (SeqOrient::Reverse, SeqOrient::Reverse) => Ordering::Equal,
+            (SeqOrient::Forward, SeqOrient::Reverse) => Ordering::Less,
+            (SeqOrient::Reverse, SeqOrient::Forward) => Ordering::Greater,
+        }
+    }
+}
+impl PartialOrd for SeqOrient {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for SeqOrient {
+    fn eq(&self, other: &Self) -> bool {
+        self == other
+    }
 }
  */
 
+#[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
+pub struct SeqPos {
+    pub orient: SeqOrient,
+    pub position: u64,
+}
+/*
+impl Ord for SeqPos {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.orient.cmp(&other.orient) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Equal => self.position.cmp(&other.position)
+        }
+    }
+}
+impl PartialOrd for SeqPos {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for SeqPos {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.orient == other.orient
+    }
+}
+ */
+impl SeqPos {
+    pub fn new(orient: SeqOrient, position: u64) -> Self {
+        SeqPos { orient, position }
+    }
+
+    pub fn new_from_bool(is_reverse: bool, position: u64) -> Self {
+        let orient: SeqOrient = match is_reverse {
+            false => SeqOrient::Forward,
+            true => SeqOrient::Reverse,
+        };
+        SeqPos::new(orient, position)
+    }
+}
+
 /// Represents a kmer in the graph
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Kmer {
+pub struct GraphKmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
     /// The start position relative to the handle
-    pub(crate) begin: u64,
+    pub(crate) begin: SeqPos,
     /// The end position relative to the handle
-    pub(crate) end: u64,
+    pub(crate) end: SeqPos,
     /// The first handle of the kmer
     #[serde(with = "SerializableHandle")]
-    pub(crate) first: Handle,
+    pub(crate) first_handle: Handle,
     /// The last handle of the kmer
     #[serde(with = "SerializableHandle")]
-    pub(crate) last: Handle,
+    pub(crate) last_handle: Handle,
     /// The orientation of the handles
     pub(crate) handle_orient: bool,
     /// The number of forks the kmer has been involved in
@@ -56,18 +118,17 @@ impl PartialEq for Kmer {
 }
  */
 
-impl Kmer {
+impl GraphKmer {
     /// This function allows for a kmer to be extended, used when the
     /// kmer is on more than one handle
     fn extend_kmer(&mut self, new_seq: String, new_handle: Handle) {
         self.seq.push_str(&new_seq);
-        //self.end += new_seq.len() as u64;
-        self.end = new_seq.len() as u64;
-        self.last = new_handle;
+        self.end = SeqPos::new_from_bool(new_handle.is_reverse(), new_seq.len() as u64);
+        self.last_handle = new_handle;
     }
 
     fn add_handle_to_complete(&mut self, new_handle: Handle) {
-        self.last = new_handle;
+        self.last_handle = new_handle;
     }
 }
 
@@ -78,8 +139,8 @@ pub fn generate_kmers(
     k: u64,
     edge_max: Option<u64>,
     degree_max: Option<u64>,
-) -> Vec<Kmer> {
-    let mut complete_kmers: Vec<Kmer> = Vec::new();
+) -> Vec<GraphKmer> {
+    let mut complete_kmers: Vec<GraphKmer> = Vec::new();
 
     let mut sorted_graph_handles: Vec<Handle> = graph.handles_iter().collect();
     sorted_graph_handles.sort();
@@ -123,20 +184,20 @@ pub fn generate_kmers(
 
             // This will store kmers that have not yet reached size k, which
             // will have to be completed from the neighbours of the handle
-            let mut incomplete_kmers: Vec<Kmer> = Vec::new();
+            let mut incomplete_kmers: Vec<GraphKmer> = Vec::new();
 
             // Try generating the "internal" kmers from the given handle
             for i in 0..handle_length {
                 let begin = i;
                 let end = min(i + k, handle_length);
-                let kmer = Kmer {
+                let kmer = GraphKmer {
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin,
-                    end,
-                    first: handle,
-                    last: handle,
+                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end: SeqPos::new_from_bool(handle.is_reverse(), end),
+                    first_handle: handle,
+                    last_handle: handle,
                     handle_orient: orient,
                     forks: 0,
                 };
@@ -177,7 +238,7 @@ pub fn generate_kmers(
 
                         for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
                             let mut inc_kmer = kmer.clone();
-                            inc_kmer.last = neighbor;
+                            inc_kmer.last_handle = neighbor;
 
                             if next_count > 1 {
                                 inc_kmer.forks += 1;
@@ -191,7 +252,7 @@ pub fn generate_kmers(
 
             // Then complete all incomplete kmers
             while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
-                handle = incomplete_kmer.last;
+                handle = incomplete_kmer.last_handle;
                 handle_seq = graph.sequence(handle).into_string_lossy();
                 handle_length = handle_seq.len() as u64;
 
@@ -264,7 +325,7 @@ pub fn generate_kmers_linearly(
     k: u64,
     edge_max: Option<u64>,
     degree_max: Option<u64>,
-) -> Vec<Kmer> {
+) -> Vec<GraphKmer> {
     assert!(!graph.paths.is_empty());
 
     // This requires two iterations, one on the forward (handles) and one on the reverse (handles).
@@ -291,9 +352,9 @@ fn generate_kmers_linearly_forward(
     k: u64,
     _edge_max: Option<u64>,
     _degree_max: Option<u64>,
-) -> Vec<Kmer> {
-    let mut kmers: Vec<Kmer> = Vec::new();
-    let mut prev_kmers_to_complete: VecDeque<Kmer> = VecDeque::new();
+) -> Vec<GraphKmer> {
+    let mut kmers: Vec<GraphKmer> = Vec::new();
+    let mut prev_kmers_to_complete: VecDeque<GraphKmer> = VecDeque::new();
 
     for path_id in graph.paths_iter() {
         let path = graph.get_path(path_id).unwrap();
@@ -303,7 +364,7 @@ fn generate_kmers_linearly_forward(
 
         // Navigate each path linearly, i.e. in the order of the nodes that make up the path
         for handle in &path.nodes {
-            let mut curr_kmers_to_complete: Vec<Kmer> = Vec::new();
+            let mut curr_kmers_to_complete: Vec<GraphKmer> = Vec::new();
 
             // Get current handle
             let handle_seq = graph.sequence(*handle).into_string_lossy();
@@ -337,14 +398,14 @@ fn generate_kmers_linearly_forward(
             for i in 0..handle_length {
                 let begin = i;
                 let end = min(i + k, handle_length);
-                let kmer = Kmer {
+                let kmer = GraphKmer {
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin,
-                    end,
-                    first: *handle,
-                    last: *handle,
+                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end: SeqPos::new_from_bool(handle.is_reverse(), end),
+                    first_handle: *handle,
+                    last_handle: *handle,
                     handle_orient: true,
                     forks: 0,
                 };
@@ -379,9 +440,9 @@ pub fn generate_kmers_linearly_reverse(
     k: u64,
     _edge_max: Option<u64>,
     _degree_max: Option<u64>,
-) -> Vec<Kmer> {
-    let mut kmers: Vec<Kmer> = Vec::new();
-    let mut prev_kmers_to_complete: VecDeque<Kmer> = VecDeque::new();
+) -> Vec<GraphKmer> {
+    let mut kmers: Vec<GraphKmer> = Vec::new();
+    let mut prev_kmers_to_complete: VecDeque<GraphKmer> = VecDeque::new();
 
     //println!("Paths are: {:#?}", graph.paths.values());
     for path_id in graph.paths_iter() {
@@ -396,7 +457,7 @@ pub fn generate_kmers_linearly_reverse(
         for handle_forward in reverse_order_handles {
             let handle = handle_forward.flip();
 
-            let mut curr_kmers_to_complete: Vec<Kmer> = Vec::new();
+            let mut curr_kmers_to_complete: Vec<GraphKmer> = Vec::new();
 
             // Get current handle
             let handle_seq = graph.sequence(handle).into_string_lossy();
@@ -430,14 +491,14 @@ pub fn generate_kmers_linearly_reverse(
             for i in 0..handle_length {
                 let begin = i;
                 let end = min(i + k, handle_length);
-                let kmer = Kmer {
+                let kmer = GraphKmer {
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin,
-                    end,
-                    first: handle,
-                    last: handle,
+                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    first_handle: handle,
+                    last_handle: handle,
                     handle_orient: false,
                     forks: 0,
                 };
@@ -467,8 +528,8 @@ pub fn generate_kmers_linearly_reverse(
 }
 
 /// Merge the kmers obtained by generate_kmers_linearly_forward and generate_kmers_linearly_reverse
-fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
-    let mut kmers: Vec<Kmer> = kmers_fwd.clone();
+fn merge_kmers(kmers_fwd: Vec<GraphKmer>, kmers_rev: Vec<GraphKmer>) -> Vec<GraphKmer> {
+    let mut kmers: Vec<GraphKmer> = kmers_fwd.clone();
 
     for kmer in kmers_rev {
         //if !kmers.contains(&kmer) {
@@ -481,17 +542,24 @@ fn merge_kmers(kmers_fwd: Vec<Kmer>, kmers_rev: Vec<Kmer>) -> Vec<Kmer> {
 
 /// Represent kmer positions on the forward/reverse linearization
 /// (= graph sequence space).
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct KmerPos {
     /// The start position of the kmer
-    pub(crate) start: u64,
-    /// The orientation of the kmer
-    pub(crate) start_orient: bool, // false = fwd, true = rev
+    pub(crate) start: SeqPos,
     /// The end position of the kmer
-    pub(crate) end: u64,
-    /// The orientation of the kmer
-    pub(crate) end_orient: bool, // false = fwd, true = rev
+    pub(crate) end: SeqPos,
 }
+/// This acts as a delimiter for KmerPos of different Kmers
+pub(crate) const KMER_POS_DELIMITER: KmerPos = KmerPos {
+    start: SeqPos {
+        orient: SeqOrient::Reverse,
+        position: u64::MAX,
+    },
+    end: SeqPos {
+        orient: SeqOrient::Reverse,
+        position: u64::MAX,
+    },
+};
 
 /// Obtain the position of a given handle in the serialized forward/reverse
 fn get_seq_pos(
@@ -518,18 +586,18 @@ fn get_seq_pos(
 /// linearization (this is effectively a Kmer -> KmerPos conversion)
 pub fn generate_pos_on_ref(
     graph: &HashGraph,
-    kmers_on_graph: &Vec<Kmer>,
+    kmers_on_graph: &Vec<GraphKmer>,
     seq_length: &u64,
     node_ref: &Vec<NodeRef>,
 ) -> Vec<KmerPos> {
     let mut kmers_on_ref: Vec<KmerPos> = Vec::new();
 
     for kmer in kmers_on_graph {
-        let first_handle_of_kmer = kmer.first;
+        let first_handle_of_kmer = kmer.first_handle;
         let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
         let first_handle_length = first_handle_node.sequence.len();
 
-        let last_handle_of_kmer = kmer.last;
+        let last_handle_of_kmer = kmer.last_handle;
         let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
         let last_handle_length = last_handle_node.sequence.len();
 
@@ -538,19 +606,17 @@ pub fn generate_pos_on_ref(
             node_ref,
             seq_length,
             &(first_handle_length as u64),
-        ) + kmer.begin;
+        ) + kmer.begin.position;
         let end_ref = get_seq_pos(
             &last_handle_of_kmer,
             node_ref,
             seq_length,
             &(last_handle_length as u64),
-        ) + kmer.end;
+        ) + kmer.end.position;
 
         let pos = KmerPos {
-            start: start_ref,
-            end: end_ref,
-            start_orient: !kmer.first.is_reverse(),
-            end_orient: !kmer.last.is_reverse(),
+            start: SeqPos::new(kmer.clone().begin.orient, start_ref),
+            end: SeqPos::new(kmer.clone().end.orient, end_ref),
         };
         kmers_on_ref.push(pos);
     }
@@ -562,25 +628,22 @@ pub fn generate_pos_on_ref(
 /// linearization (this is effectively a Kmer -> KmerPos conversion)
 pub fn generate_pos_on_ref_2(
     graph: &HashGraph,
-    kmers_on_graph: &Vec<Kmer>,
+    kmers_on_graph: &Vec<GraphKmer>,
     seq_length: &u64,
     node_ref: &Vec<NodeRef>,
     hashes: &mut Vec<u64>,
     kmers_start_offsets: &mut Vec<u64>,
 ) -> Vec<KmerPos> {
     let mut kmers_on_ref: Vec<Vec<KmerPos>> = Vec::new();
-
-    // Hash builder to generate hashes
-    //let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
     let mut last_kmer: Option<String> = None;
     let mut curr_kmer_positions: Vec<KmerPos> = Vec::new();
 
     for kmer in kmers_on_graph {
-        let first_handle_of_kmer = kmer.first;
+        let first_handle_of_kmer = kmer.first_handle;
         let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
         let first_handle_length = first_handle_node.sequence.len();
 
-        let last_handle_of_kmer = kmer.last;
+        let last_handle_of_kmer = kmer.last_handle;
         let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
         let last_handle_length = last_handle_node.sequence.len();
 
@@ -589,19 +652,17 @@ pub fn generate_pos_on_ref_2(
             node_ref,
             seq_length,
             &(first_handle_length as u64),
-        ) + kmer.begin;
+        ) + kmer.begin.position;
         let end_ref = get_seq_pos(
             &last_handle_of_kmer,
             node_ref,
             seq_length,
             &(last_handle_length as u64),
-        ) + kmer.end;
+        ) + kmer.end.position;
 
         let pos = KmerPos {
-            start: start_ref,
-            end: end_ref,
-            start_orient: !kmer.first.is_reverse(),
-            end_orient: !kmer.last.is_reverse(),
+            start: SeqPos::new(kmer.clone().begin.orient, start_ref),
+            end: SeqPos::new(kmer.clone().end.orient, end_ref),
         };
 
         last_kmer = match last_kmer {
@@ -640,16 +701,12 @@ pub fn generate_pos_on_ref_2(
 
     // sort each kmer's positions
     // (dedup not necessary since already done when generating graph kmers)
+    kmers_on_ref.par_iter_mut().for_each(|x| x.par_sort());
+    /*
     for positions_list in &mut kmers_on_ref {
-        //println!("Unsorted positions: {:#?}", positions_list);
-        //positions_list.dedup();
-        positions_list.par_sort_by(|x, y| match x.start_orient.cmp(&y.start_orient) {
-            Ordering::Equal => x.start.cmp(&y.start),
-            other => other,
-        });
-        //println!("Sorted positions: {:#?}", positions_list);
+        positions_list.par_sort();
     }
-    //println!("Kmers on ref non flattened: {:#?}", kmers_on_ref);
+     */
 
     // flatten kmer_pos_on_ref and store offsets.
     // Instead of having separate vecs for each kmers
@@ -671,13 +728,7 @@ pub fn generate_pos_on_ref_2(
 
         // Add end delimiter, this is needed because
         // we only store the starting positions as offsets
-        let delimiter = KmerPos {
-            start: u64::MAX,
-            end: u64::MAX,
-            start_orient: false, //Doesn't really matter, will only check max_value
-            end_orient: false,   //Doesn't really matter, will only check max_value
-        };
-        kmers_on_ref_flattened.push(delimiter);
+        kmers_on_ref_flattened.push(KMER_POS_DELIMITER);
         offset += 1;
     }
     //println!("Kmers on ref flattened: {:#?}", kmers_on_ref_flattened);
@@ -690,4 +741,53 @@ pub fn generate_pos_on_ref_2(
 pub fn generate_hash(seq: &String) -> u64 {
     let hash_builder = RandomState::with_seeds(0, 0, 0, 0);
     u64::get_hash(&seq, &hash_builder)
+}
+
+#[cfg(test)]
+mod test {
+    use crate::kmer::{SeqOrient, SeqPos};
+    use rayon::prelude::ParallelSliceMut;
+
+    #[test]
+    fn test_assert_seqorient_ordering() {
+        let mut orients: Vec<SeqOrient> = vec![
+            SeqOrient::Reverse,
+            SeqOrient::Forward,
+            SeqOrient::Reverse,
+            SeqOrient::Forward,
+        ];
+        orients.sort();
+        assert_eq!(
+            orients,
+            vec![
+                SeqOrient::Forward,
+                SeqOrient::Forward,
+                SeqOrient::Reverse,
+                SeqOrient::Reverse
+            ]
+        );
+    }
+
+    #[test]
+    fn test_assert_seqpos_ordering() {
+        let a = SeqPos {
+            orient: SeqOrient::Forward,
+            position: 2,
+        };
+        let b = SeqPos {
+            orient: SeqOrient::Forward,
+            position: 5,
+        };
+        let c = SeqPos {
+            orient: SeqOrient::Reverse,
+            position: 1,
+        };
+        let d = SeqPos {
+            orient: SeqOrient::Reverse,
+            position: 4,
+        };
+        let mut orients: Vec<SeqPos> = vec![b, c, a, d];
+        orients.par_sort();
+        assert_eq!(orients, vec![a, b, c, d]);
+    }
 }

@@ -1,6 +1,7 @@
 use crate::chain::Chain;
 use crate::index::Index;
 use crate::io::QuerySequence;
+use crate::kmer::{SeqOrient, SeqPos};
 use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
 use bstr::ByteVec;
 use core::cmp;
@@ -24,13 +25,13 @@ fn find_range_single_chain(index: &Index, chain: &Chain) -> Range<u64> {
     let min_node = chain
         .anchors
         .par_iter()
-        .map(|a| index.get_node_from_pos(a.target_begin as usize, a.target_begin_orient))
+        .map(|a| index.get_node_from_pos(a.target_begin.position as usize, a.target_begin.orient))
         .min()
         .unwrap();
     let max_node = chain
         .anchors
         .par_iter()
-        .map(|a| index.get_node_from_pos(a.target_end as usize, a.target_end_orient))
+        .map(|a| index.get_node_from_pos(a.target_end.position as usize, a.target_end.orient))
         .max()
         .unwrap();
     min_node..max_node
@@ -42,30 +43,25 @@ pub fn extract_query_subsequence(
 ) -> Vec<String> {
     let subseqs: Vec<String> = chains
         .par_iter()
-        .map(|c| {
-            extract_single_subsequence(
-                index,
-                c.target_begin as usize,
-                c.target_begin_orient,
-                c.target_end as usize,
-                c.target_end_orient,
-            )
-        })
+        .map(|c| extract_single_subsequence(index, c.target_begin, c.target_end))
         .collect();
     subseqs
 }
-fn extract_single_subsequence(
-    index: &Index,
-    begin: usize,
-    begin_orient: bool,
-    end: usize,
-    end_orient: bool,
-) -> String {
-    let substring = match (begin_orient, end_orient) {
-        (true, true) => index.seq_fwd.substring(begin, end).to_string(),
-        (false, false) => index.seq_rev.substring(begin, end).to_string(),
+fn extract_single_subsequence(index: &Index, begin: SeqPos, end: SeqPos) -> String {
+    let substring = match (begin.orient, end.orient) {
+        (SeqOrient::Forward, SeqOrient::Forward) => index
+            .seq_fwd
+            .substring(begin.position as usize, end.position as usize)
+            .to_string(),
+        (SeqOrient::Reverse, SeqOrient::Reverse) => index
+            .seq_rev
+            .substring(begin.position as usize, end.position as usize)
+            .to_string(),
         // TODO: this is 100% not right, maybe I should take a part from fwd and another from rev?
-        _ => index.seq_fwd.substring(begin, end).to_string(),
+        _ => index
+            .seq_fwd
+            .substring(begin.position as usize, end.position as usize)
+            .to_string(),
     };
     substring
 }

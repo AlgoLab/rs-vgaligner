@@ -17,6 +17,7 @@ use bstr::{ByteSlice, ByteVec};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 
+use crate::kmer::{SeqOrient, SeqPos};
 use handlegraph::handle::Handle;
 use itertools::Itertools;
 
@@ -40,24 +41,19 @@ pub struct Anchor {
     pub query_end: u64,
 
     // These are positions on the graph linearization (position + fwd/rev)
-    pub target_begin: u64,
-    pub target_begin_orient: bool,
-    pub target_end: u64,
-    pub target_end_orient: bool,
+    pub target_begin: SeqPos,
+    pub target_end: SeqPos,
 
     // Values used during chaining
     pub max_chain_score: f64,
     pub best_predecessor_id: Option<AnchorId>,
 }
-
 impl Anchor {
     pub fn new(
         query_begin: u64,
         query_end: u64,
-        target_begin: u64,
-        target_begin_orient: bool,
-        target_end: u64,
-        target_end_orient: bool,
+        target_begin: SeqPos,
+        target_end: SeqPos,
         id: u64,
     ) -> Self {
         Anchor {
@@ -65,9 +61,7 @@ impl Anchor {
             query_begin,
             query_end,
             target_begin,
-            target_begin_orient,
             target_end,
-            target_end_orient,
             max_chain_score: 0f64,
             best_predecessor_id: None,
         }
@@ -77,6 +71,7 @@ impl Anchor {
 /// Obtain all the anchors between the [index] and the [query] sequence
 // Since the kmer positions are already stored in the index, one simply has to
 // split the query into kmers, and then get the target positions from the index itself.
+// NOTE: if a kmer appears in multiple positions, ALL the resulting anchors will be emitted
 pub(crate) fn anchors_for_query(index: &Index, query: &QuerySequence) -> Vec<Anchor> {
     let mut anchors: Vec<Anchor> = Vec::new();
 
@@ -91,18 +86,13 @@ pub(crate) fn anchors_for_query(index: &Index, query: &QuerySequence) -> Vec<Anc
         let kmer = query_kmers.get(i).unwrap();
         let ref_pos_vec = index.find_positions_for_query_kmer(&kmer.as_str());
 
-        //println!("Curr kmer: {}", kmer);
-        //println!("Positions on ref: {:#?}", ref_pos_vec);
-
         let mut anchors_for_kmer: Vec<Anchor> = Vec::new();
         for pos in ref_pos_vec {
             anchors_for_kmer.push(Anchor::new(
                 i as u64,
                 (i + kmer_size) as u64,
                 pos.start,
-                pos.start_orient,
                 pos.end,
-                pos.end_orient,
                 id,
             ));
             id += 1;
@@ -122,12 +112,9 @@ pub struct Chain {
     pub score: f64,
     pub mapping_quality: f64,
     pub is_secondary: bool,
-    pub target_begin: u64,
-    pub target_begin_orient: bool,
-    pub target_end: u64,
-    pub target_end_orient: bool,
+    pub target_begin: SeqPos,
+    pub target_end: SeqPos,
 }
-
 impl PartialEq for Chain {
     fn eq(&self, other: &Self) -> bool {
         self.target_begin.eq(&other.target_begin)
@@ -137,9 +124,7 @@ impl PartialEq for Chain {
             && approx_eq!(f64, self.mapping_quality, other.mapping_quality, ulps = 2)
     }
 }
-
 impl Eq for Chain {}
-
 impl Chain {
     pub fn new() -> Self {
         Chain {
@@ -147,10 +132,8 @@ impl Chain {
             score: 0f64,
             mapping_quality: f64::MIN,
             is_secondary: false,
-            target_begin: 0,
-            target_begin_orient: true,
-            target_end: 0,
-            target_end_orient: true,
+            target_begin: SeqPos::new(SeqOrient::Forward, 0),
+            target_end: SeqPos::new(SeqOrient::Forward, 0),
         }
     }
 
@@ -172,26 +155,23 @@ impl Chain {
     // where the size is no more than some function of our seed_length * number of anchors * 1+mismatch_rate
     pub fn compute_boundaries(&mut self, _seed_length: u64, mismatch_rate: f64) {
         let first_target_end = self.anchors.front().unwrap().target_end;
-        let first_target_end_orient = self.anchors.front().unwrap().target_end_orient;
         let last_target_begin = self.anchors.back().unwrap().target_begin;
-        let last_target_begin_orient = self.anchors.back().unwrap().target_begin_orient;
 
         let first_target_begin = self.anchors.front().unwrap().target_begin;
-        let first_target_begin_orient = self.anchors.front().unwrap().target_begin_orient;
         let last_target_end = self.anchors.back().unwrap().target_end;
-        let last_target_end_orient = self.anchors.back().unwrap().target_end_orient;
 
-        if first_target_begin_orient == last_target_end_orient
+        if first_target_begin.orient == last_target_end.orient
             && first_target_begin < last_target_end
-            && self.score * (1f64 + mismatch_rate) > (last_target_end - first_target_begin) as f64
+            && self.score * (1f64 + mismatch_rate)
+                > (last_target_end.position - first_target_begin.position) as f64
         {
-            self.target_begin = first_target_begin;
-            self.target_end = last_target_end;
-        } else if first_target_end_orient == last_target_begin_orient
+            self.target_begin = first_target_begin.clone();
+            self.target_end = last_target_end.clone();
+        } else if first_target_end.orient == last_target_begin.orient
             && first_target_end < last_target_begin
         {
-            self.target_begin = first_target_end;
-            self.target_end = last_target_begin;
+            self.target_begin = first_target_end.clone();
+            self.target_end = last_target_begin.clone();
         } else {
             self.score = -f64::MAX;
         }
@@ -213,8 +193,9 @@ pub fn score_anchor(a: &Anchor, b: &Anchor, seed_length: &u64, max_gap: &u64) ->
     let mut score: f64 = a.max_chain_score;
 
     if a.query_end >= b.query_end
-        || !(((a.target_end_orient == b.target_end_orient) == a.target_begin_orient)
-            == b.target_begin_orient)
+        || !(a.target_end.orient == b.target_end.orient
+            && a.target_begin.orient == b.target_begin.orient
+            && a.target_end.orient == b.target_begin.orient)
     {
         score = -f64::MAX;
     } else {
@@ -230,12 +211,12 @@ pub fn score_anchor(a: &Anchor, b: &Anchor, seed_length: &u64, max_gap: &u64) ->
         //let target_length = min(b.target_begin-a.target_begin, b.target_end-a.target_end);
 
         let target_begin_diff = match b.target_begin > a.target_begin {
-            true => b.target_begin - a.target_begin,
-            false => a.target_begin - b.target_begin,
+            true => b.target_begin.position - a.target_begin.position,
+            false => a.target_begin.position - b.target_begin.position,
         };
         let target_end_diff = match b.target_end > a.target_end {
-            true => b.target_end - a.target_end,
-            false => a.target_end - b.target_end,
+            true => b.target_end.position - a.target_end.position,
+            false => a.target_end.position - b.target_end.position,
         };
         let target_length = min(target_begin_diff, target_end_diff);
 
@@ -288,7 +269,7 @@ pub fn chain_anchors(
     // ----- STEP 1 : finding the optimal chaining scores -----
 
     // First sort the anchors by their ending position
-    anchors.par_sort_by(|a, b| a.target_end.cmp(&b.target_end));
+    anchors.par_sort_by(|a, b| a.target_end.position.cmp(&b.target_end.position));
 
     // Then, compute the maximal chaining score up to the current anchor.
     // This score is called f(i) in the paper.
@@ -475,9 +456,10 @@ pub fn write_chain_gaf(
 
 #[cfg(test)]
 mod test {
-    use crate::chain::{anchors_for_query, chain_anchors, Chain};
+    use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
     use crate::index::Index;
     use crate::io::QuerySequence;
+    use crate::kmer::SeqOrient;
     use ab_poa::abpoa_wrapper::AbpoaAligner;
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
@@ -485,6 +467,7 @@ mod test {
     use handlegraph::hashgraph::HashGraph;
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
+    use rayon::prelude::ParallelSliceMut;
     use std::path::PathBuf;
 
     /// This function creates a simple graph, used for debugging
@@ -524,8 +507,17 @@ mod test {
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
         let query: String = String::from("ACT");
         let input_seq = QuerySequence::from_string(&query);
+
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 1);
+
+        let anchor = anchors.get(0).unwrap();
+        assert_eq!(anchor.query_begin, 0);
+        assert_eq!(anchor.query_end, 3);
+        assert_eq!(anchor.target_begin.position, 0);
+        assert_eq!(anchor.target_begin.orient, SeqOrient::Forward);
+        assert_eq!(anchor.target_end.position, 3);
+        assert_eq!(anchor.target_end.orient, SeqOrient::Forward);
     }
 
     #[test]
@@ -533,11 +525,11 @@ mod test {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
-        let anchors = anchors_for_query(&index, &input_seq);
+        let mut anchors = anchors_for_query(&index, &input_seq);
 
         // There are at least 4 3-mers in the query, there can be more because
         // a kmer can appear in multiple positions
-        assert!(anchors.len() >= 4)
+        assert!(anchors.len() >= 4);
     }
 
     #[test]
@@ -565,6 +557,8 @@ mod test {
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
+        println!("Anchors: {:#?}", anchors);
+        println!("Len: {:#?}", anchors.len());
         let chains: Vec<Chain> = chain_anchors(
             &mut anchors,
             index.kmer_length,

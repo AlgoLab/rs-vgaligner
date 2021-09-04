@@ -58,7 +58,9 @@ pub fn map_reads(
             .map(|chain| GAFAlignment::from_chain(chain, query))
             .collect();
 
+        /*
         if !dont_align {
+            println!("NOT DONT ALIGN");
             // POA stuff
             let curr_alignments: Vec<GAFAlignment> = seq_chains
                 .par_iter()
@@ -66,6 +68,7 @@ pub fn map_reads(
                 .collect();
             alignments.extend(curr_alignments.into_iter());
         }
+         */
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());
