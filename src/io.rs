@@ -13,12 +13,12 @@ enum InputFileTypes {
 }
 
 #[derive(Debug)]
-pub struct InputSequence {
+pub struct QuerySequence {
     pub name: String,
     pub seq: String,
 }
 
-impl InputSequence {
+impl QuerySequence {
     // TODO: maybe an Option return type would be better
     pub fn split_into_kmers(&self, kmer_size: usize) -> Vec<String> {
         let mut seq_kmers: Vec<String> = Vec::new();
@@ -38,7 +38,7 @@ impl InputSequence {
     }
 
     pub fn from_string(seq: &str) -> Self {
-        InputSequence {
+        QuerySequence {
             name: String::from(""),
             seq: seq.to_string().clone(),
         }
@@ -46,8 +46,8 @@ impl InputSequence {
 }
 
 /// Parse a fasta/fastq file and returns the list of sequences from the given file
-pub fn read_seqs_from_file(filename: &str) -> Result<Vec<InputSequence>> {
-    let mut seqs: Vec<InputSequence> = Vec::new();
+pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
+    let mut seqs: Vec<QuerySequence> = Vec::new();
 
     let file = File::open(filename)?;
     let mut lines = BufReader::new(file).lines().peekable();
@@ -65,13 +65,13 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<InputSequence>> {
     if file_type == InputFileTypes::Fasta {
         while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
             let name: String = String::from(name_long.substring(1, name_long.len()));
-            seqs.push(InputSequence { name, seq });
+            seqs.push(QuerySequence { name, seq });
         }
     } else if file_type == InputFileTypes::Fastq {
         while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
             (lines.next(), lines.next(), lines.next(), lines.next())
         {
-            seqs.push(InputSequence { name, seq });
+            seqs.push(QuerySequence { name, seq });
         }
     }
 
@@ -80,7 +80,7 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<InputSequence>> {
 
 #[cfg(test)]
 mod test {
-    use crate::io::{read_seqs_from_file, InputSequence};
+    use crate::io::{read_seqs_from_file, QuerySequence};
 
     #[test]
     fn test_read_fasta() {
@@ -96,7 +96,7 @@ mod test {
 
     #[test]
     fn test_split_ok() {
-        let test_seq = InputSequence::from_string(&String::from("AAACTG"));
+        let test_seq = QuerySequence::from_string(&String::from("AAACTG"));
         let seq_kmers = test_seq.split_into_kmers(3);
         assert_eq!(seq_kmers.len(), 4);
         assert_eq!(*seq_kmers.get(0).unwrap(), String::from("AAA"));
@@ -107,7 +107,7 @@ mod test {
 
     #[test]
     fn test_split_greater() {
-        let test_seq = InputSequence::from_string(&String::from("AAA"));
+        let test_seq = QuerySequence::from_string(&String::from("AAA"));
         let seq_kmers = test_seq.split_into_kmers(4);
         assert_eq!(seq_kmers.len(), 0);
     }

@@ -1,20 +1,20 @@
 use crate::chain::{anchors_for_query, chain_anchors, write_chain_gaf, Anchor, Chain};
 use crate::index::Index;
-use crate::io::InputSequence;
+use crate::io::QuerySequence;
 
 use handlegraph::hashgraph::HashGraph;
 use rayon::prelude::IntoParallelRefIterator;
 use std::fs::File;
 use std::io::Write;
 
+use crate::align::{obtain_base_level_alignment, GAFAlignment};
 use rayon::iter::ParallelIterator;
-use crate::align::{GAFAlignment, obtain_base_level_alignment};
 
 /// Map the [input] reads against the [index].
 // TODO: add explaination to other parameters
 pub fn map_reads(
     index: &Index,
-    inputs: &Vec<InputSequence>,
+    inputs: &Vec<QuerySequence>,
     bandwidth: u64,
     max_gap: u64,
     chain_min_n_anchors: u64,
@@ -62,9 +62,7 @@ pub fn map_reads(
             // POA stuff
             let curr_alignments: Vec<GAFAlignment> = seq_chains
                 .par_iter()
-                .map(|chain| {
-                    obtain_base_level_alignment(index, chain, query)
-                })
+                .map(|chain| obtain_base_level_alignment(index, chain, query))
                 .collect();
             alignments.extend(curr_alignments.into_iter());
         }
@@ -80,10 +78,7 @@ pub fn map_reads(
         } else {
             match out_prefix {
                 Some(prefix) => {
-                    match write_gaf_to_file(
-                        &chains_gaf,
-                        prefix.clone().to_string() + ".gaf",
-                    ) {
+                    match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
                         Err(e) => panic!("{}", e),
                         _ => println!("Chains stored correctly!"),
                     }
@@ -99,11 +94,8 @@ pub fn map_reads(
 }
 
 /// Store [chains_gaf_strings] in the file with name [file_name]
-fn write_gaf_to_file(
-    gaf_alignments: &Vec<GAFAlignment>,
-    file_name: String,
-) -> std::io::Result<()> {
-    let gaf_strings : Vec<String> = gaf_alignments.iter().map(|aln| aln.to_string()).collect();
+fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> std::io::Result<()> {
+    let gaf_strings: Vec<String> = gaf_alignments.iter().map(|aln| aln.to_string()).collect();
     let mut file =
         File::create(&file_name).unwrap_or_else(|_| panic!("Couldn't create file {}", &file_name));
     file.write_all(&gaf_strings.join("").as_bytes())
@@ -133,8 +125,7 @@ mod test {
         let query = read_seqs_from_file("./test/test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None,
-            true
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true,
         );
     }
 }

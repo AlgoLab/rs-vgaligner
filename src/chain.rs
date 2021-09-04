@@ -1,5 +1,5 @@
 use crate::index::Index;
-use crate::io::InputSequence;
+use crate::io::QuerySequence;
 use bio::data_structures::interval_tree::*;
 use core::cmp;
 use float_cmp::approx_eq;
@@ -77,7 +77,7 @@ impl Anchor {
 /// Obtain all the anchors between the [index] and the [query] sequence
 // Since the kmer positions are already stored in the index, one simply has to
 // split the query into kmers, and then get the target positions from the index itself.
-pub(crate) fn anchors_for_query(index: &Index, query: &InputSequence) -> Vec<Anchor> {
+pub(crate) fn anchors_for_query(index: &Index, query: &QuerySequence) -> Vec<Anchor> {
     let mut anchors: Vec<Anchor> = Vec::new();
 
     // Get kmers from the query, having the same size as the ones
@@ -477,7 +477,7 @@ pub fn write_chain_gaf(
 mod test {
     use crate::chain::{anchors_for_query, chain_anchors, Chain};
     use crate::index::Index;
-    use crate::io::InputSequence;
+    use crate::io::QuerySequence;
     use ab_poa::abpoa_wrapper::AbpoaAligner;
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
@@ -523,7 +523,7 @@ mod test {
         graph.create_handle("ACT".as_bytes(), 1);
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
         let query: String = String::from("ACT");
-        let input_seq = InputSequence::from_string(&query);
+        let input_seq = QuerySequence::from_string(&query);
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 1);
     }
@@ -532,7 +532,7 @@ mod test {
     fn test_anchors() {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from("ACTGCA"));
+        let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let anchors = anchors_for_query(&index, &input_seq);
 
         // There are at least 4 3-mers in the query, there can be more because
@@ -544,7 +544,7 @@ mod test {
     fn test_no_anchors() {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from("AAATTT"));
+        let input_seq = QuerySequence::from_string(&String::from("AAATTT"));
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
     }
@@ -553,7 +553,7 @@ mod test {
     fn test_no_anchors_2() {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from(""));
+        let input_seq = QuerySequence::from_string(&String::from(""));
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
     }
@@ -562,7 +562,7 @@ mod test {
     fn test_chains() {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from("ACTGCA"));
+        let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
         let chains: Vec<Chain> = chain_anchors(
@@ -590,7 +590,7 @@ mod test {
         let graph = HashGraph::from_gfa(&gfa);
 
         let index = Index::build(&graph, 11, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from(index.seq_fwd.clone()));
+        let input_seq = QuerySequence::from_string(&String::from(index.seq_fwd.clone()));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
         //println!("Anchors len: {}", anchors.len());
@@ -616,7 +616,7 @@ mod test {
     fn test_no_chains() {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, 7.0, None);
-        let input_seq = InputSequence::from_string(&String::from("AAATTT"));
+        let input_seq = QuerySequence::from_string(&String::from("AAATTT"));
         let mut anchors = anchors_for_query(&index, &input_seq);
         let chains: Vec<Chain> = chain_anchors(
             &mut anchors,

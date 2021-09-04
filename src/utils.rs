@@ -7,7 +7,7 @@ use handlegraph::handle::{Direction, Edge, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelRefIterator, ParallelSliceMut};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 
 /// Additional data about each node, to be used together with seq_bv
@@ -23,13 +23,11 @@ pub struct NodeRef {
 
 /// Find the length of the sequence encoded by the graph
 pub fn find_graph_seq_length(graph: &HashGraph) -> u64 {
-    let mut total_length = 0;
-    //for value in graph.handles_iter() {
-    for value in graph.handles_iter() {
-        let node = graph.get_node(&value.id()).unwrap();
-        total_length += node.sequence.len() as u64;
-    }
-    total_length
+    let graph_handles: Vec<Handle> = graph.handles_iter().collect();
+    graph_handles
+        .into_par_iter()
+        .map(|h| graph.sequence(h).len() as u64)
+        .sum()
 }
 
 /// Find the forward sequence encoded in a (not necessarily partially ordered) graph
