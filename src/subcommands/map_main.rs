@@ -49,7 +49,7 @@ pub fn map_main(global_matches : &ArgMatches) {
     let _write_superchains = matches
         .is_present("write-superchains");
 
-    let _dont_align = matches
+    let dont_align = matches
         .is_present("dont-align");
 
     let index = Index::load_from_prefix(idx_prefix.to_string());
@@ -59,5 +59,5 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query,50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains, out_prefix);
+              write_chains, out_prefix, dont_align);
 }

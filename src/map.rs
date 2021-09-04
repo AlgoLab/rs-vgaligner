@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Write;
 
 use rayon::iter::ParallelIterator;
+use crate::align::{GAFAlignment, obtain_base_level_alignment};
 
 /// Map the [input] reads against the [index].
 // TODO: add explaination to other parameters
@@ -22,9 +23,11 @@ pub fn map_reads(
     max_mapq: f64,
     write_chains: bool,
     out_prefix: Option<&str>,
+    dont_align: bool,
 ) {
     let mut chains: Vec<Chain> = Vec::new();
-    let mut chains_gaf_strings: Vec<String> = Vec::new();
+    let mut chains_gaf: Vec<GAFAlignment> = Vec::new();
+    let mut alignments: Vec<GAFAlignment> = Vec::new();
 
     // TODO: use start_id to disambiguate anchors in different for iterations?
     // i.e. the anchor 23 appeared multiple times in chains, that was because
@@ -50,25 +53,25 @@ pub fn map_reads(
         );
 
         // Convert chains to strings and do the same
-        let curr_chains_gaf_strings: Vec<String> = seq_chains
+        let curr_chains_gaf: Vec<GAFAlignment> = seq_chains
             .par_iter()
-            .map(|chain| write_chain_gaf(chain, index, &query.name, query.seq.len()))
+            .map(|chain| GAFAlignment::from_chain(chain, query))
             .collect();
 
-        // POA stuff
-        // TODO: fix HashGraph, index needs to store edges
-        /*
-        let alignments: Vec<GAFAlignment> = seq_chains
-            .par_iter()
-            .map(|chain| {
-                obtain_base_level_alignment(index, chain, &HashGraph::new(), query.seq.as_str())
-            })
-            .collect();
-         */
+        if !dont_align {
+            // POA stuff
+            let curr_alignments: Vec<GAFAlignment> = seq_chains
+                .par_iter()
+                .map(|chain| {
+                    obtain_base_level_alignment(index, chain, query)
+                })
+                .collect();
+            alignments.extend(curr_alignments.into_iter());
+        }
 
         // Add results to the ones from previous iterations
         chains.extend(seq_chains.into_iter());
-        chains_gaf_strings.extend(curr_chains_gaf_strings.into_iter());
+        chains_gaf.extend(curr_chains_gaf.into_iter());
     }
 
     if write_chains {
@@ -77,8 +80,8 @@ pub fn map_reads(
         } else {
             match out_prefix {
                 Some(prefix) => {
-                    match write_chains_to_file(
-                        &chains_gaf_strings,
+                    match write_gaf_to_file(
+                        &chains_gaf,
                         prefix.clone().to_string() + ".gaf",
                     ) {
                         Err(e) => panic!("{}", e),
@@ -86,8 +89,8 @@ pub fn map_reads(
                     }
                 }
                 _ => {
-                    for gaf_str in chains_gaf_strings {
-                        println!("{}", gaf_str);
+                    for gaf_str in chains_gaf {
+                        println!("{:#?}", gaf_str);
                     }
                 }
             }
@@ -96,13 +99,14 @@ pub fn map_reads(
 }
 
 /// Store [chains_gaf_strings] in the file with name [file_name]
-fn write_chains_to_file(
-    chains_gaf_strings: &Vec<String>,
+fn write_gaf_to_file(
+    gaf_alignments: &Vec<GAFAlignment>,
     file_name: String,
 ) -> std::io::Result<()> {
+    let gaf_strings : Vec<String> = gaf_alignments.iter().map(|aln| aln.to_string()).collect();
     let mut file =
         File::create(&file_name).unwrap_or_else(|_| panic!("Couldn't create file {}", &file_name));
-    file.write_all(&chains_gaf_strings.join("").as_bytes())
+    file.write_all(&gaf_strings.join("").as_bytes())
         .unwrap_or_else(|_| panic!("Couldn't write to file {}", &file_name));
     Ok(())
 }
@@ -130,6 +134,7 @@ mod test {
 
         map_reads(
             &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None,
+            true
         );
     }
 }

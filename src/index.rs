@@ -34,12 +34,12 @@ pub struct Index {
     n_edges: u64,
     // what's the most-efficient graph topology we can store?
     /// Edges of the input graph
-    edges: Vec<Handle>,
+    pub edges: Vec<Handle>,
     /// Node count of the input graph
     n_nodes: u64,
     // refer to ranges in edges
     /// Compactly represent nodes and edges of the input graph
-    node_ref: Vec<NodeRef>,
+    pub node_ref: Vec<NodeRef>,
     // End of various data related to the starting graph -----
 
     // Relevant part for index ---------
