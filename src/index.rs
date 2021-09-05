@@ -416,16 +416,21 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
 
-    use crate::kmer::{generate_hash, generate_kmers_linearly, SeqOrient};
+    use crate::kmer::{generate_hash, generate_kmers_linearly, SeqOrient, SeqPos};
 
     use super::*;
 
     use substring::Substring;
+    use itertools::Itertools;
 
     /// This function creates a simple graph, used for debugging
-    ///        | 2: CT \
-    /// 1:  A            4: GCA
-    ///        \ 3: GA |
+    ///          | 2: CT \
+    /// FWD  1: A         4: GCA
+    ///          \ 3: GA |
+    ///
+    ///          | 2: AG \
+    /// REV  1: T         4: TGC
+    ///          \ 3: TC |
     fn create_simple_graph() -> HashGraph {
         let mut graph: HashGraph = HashGraph::new();
 
@@ -453,9 +458,13 @@ mod test {
     }
 
     /// This function creates a simple graph, used for debugging
-    ///        | 2: T \
-    ///  1: GAT         4: CA
-    ///        \ 3: A |
+    ///             | 2: T \
+    ///  FWD:  1: GAT         4: CA
+    ///             \ 3: A |
+    ///
+    ///             | 2: A \
+    ///  REV:  1: ATC        4: TG
+    ///             \ 3: T |
     fn create_simple_graph_2() -> HashGraph {
         let mut graph: HashGraph = HashGraph::new();
         let h1 = graph.create_handle("GAT".as_bytes(), 1);
@@ -901,4 +910,88 @@ mod test {
             assert_eq!(table_value, deserialized_table_value);
         }
     }
+
+    #[test]
+    fn test_index_access() {
+        // Build the index
+        let graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        // find the positions for "ACT" kmer
+        let ref_pos_vec = index.find_positions_for_query_kmer("ACT");
+        assert_eq!(ref_pos_vec.len(), 1);
+
+        let act_pos = KmerPos {
+            start: SeqPos {
+                orient: SeqOrient::Forward,
+                position: 0,
+            },
+            end: SeqPos {
+                orient: SeqOrient::Forward,
+                position: 3,
+            },
+        };
+        assert_eq!(*ref_pos_vec.get(0).unwrap(), act_pos)
+    }
+
+    #[test]
+    fn test_index_access_2() {
+        // Build the index
+        let mut graph = HashGraph::new();
+
+        // TTT -> AAA
+        let h1 = graph.create_handle("TTT".as_bytes(), 1);
+        let h2 = graph.create_handle("AAA".as_bytes(), 2);
+        graph.create_edge(&Edge(h1, h2));
+
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        // find the positions for "ACT" kmer
+        let ref_pos_vec = index.find_positions_for_query_kmer("TTT");
+        assert_eq!(ref_pos_vec.len(), 2);
+
+        let ttt_pos_fwd = KmerPos {
+            start: SeqPos {
+                orient: SeqOrient::Forward,
+                position: 0,
+            },
+            end: SeqPos {
+                orient: SeqOrient::Forward,
+                position: 3,
+            },
+        };
+        assert_eq!(*ref_pos_vec.get(0).unwrap(), ttt_pos_fwd);
+
+        let ttt_pos_rev = KmerPos {
+            start: SeqPos {
+                orient: SeqOrient::Reverse,
+                position: 0,
+            },
+            end: SeqPos {
+                orient: SeqOrient::Reverse,
+                position: 3,
+            },
+        };
+        assert_eq!(*ref_pos_vec.get(1).unwrap(), ttt_pos_rev)
+    }
+
+    #[test]
+    fn test_index_access_bv() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        //println!("Node ref: {:#?}", index.node_ref);
+        for handle in graph.handles_iter().sorted() {
+            //println!("Handle: {:#?}, id: {}", handle, (u64::from(handle.id())-1) as usize);
+
+            //Obtain id and remove 1 (this is necessary to access the correct node ref)
+            let node_ref_pos = (u64::from(handle.id())-1) as usize;
+
+            let node_ref = index.node_ref.get(node_ref_pos).unwrap();
+            println!("Handle: {:#?}, Node_ref: {:#?}", handle, node_ref);
+        }
+
+    }
+
 }

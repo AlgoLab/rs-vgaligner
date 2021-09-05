@@ -84,8 +84,8 @@ mod test {
 
     #[test]
     fn test_read_fasta() {
-        let test_seqs = read_seqs_from_file("./test/test.fa").unwrap();
-        assert_eq!(test_seqs.len(), 10);
+        let test_seqs = read_seqs_from_file("./test/single-read-test.fa").unwrap();
+        assert_eq!(test_seqs.len(), 1);
     }
 
     #[test]
@@ -109,6 +109,13 @@ mod test {
     fn test_split_greater() {
         let test_seq = QuerySequence::from_string(&String::from("AAA"));
         let seq_kmers = test_seq.split_into_kmers(4);
+        assert_eq!(seq_kmers.len(), 0);
+    }
+
+    #[test]
+    fn test_split_lesser() {
+        let test_seq = QuerySequence::from_string(&String::from("AA"));
+        let seq_kmers = test_seq.split_into_kmers(3);
         assert_eq!(seq_kmers.len(), 0);
     }
 }
