@@ -81,10 +81,10 @@ pub(crate) struct GAFAlignment {
     notes: String,
 }
 impl GAFAlignment {
-    pub(crate) fn from_chain(chain: &Chain, query: &QuerySequence) -> Self {
+    pub(crate) fn from_chain(chain: &Chain) -> Self {
         GAFAlignment {
-            query_name: query.name.clone(),
-            query_length: query.seq.len() as u64,
+            query_name: chain.query.name.clone(),
+            query_length: chain.query.seq.len() as u64,
             query_start: chain.anchors.front().unwrap().query_begin,
             query_end: chain.anchors.back().unwrap().query_end,
             strand: '+',

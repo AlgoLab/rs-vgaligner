@@ -114,6 +114,7 @@ pub struct Chain {
     pub is_secondary: bool,
     pub target_begin: SeqPos,
     pub target_end: SeqPos,
+    pub query: QuerySequence
 }
 impl PartialEq for Chain {
     fn eq(&self, other: &Self) -> bool {
@@ -134,6 +135,7 @@ impl Chain {
             is_secondary: false,
             target_begin: SeqPos::new(SeqOrient::Forward, 0),
             target_end: SeqPos::new(SeqOrient::Forward, 0),
+            query: QuerySequence::new(),
         }
     }
 
@@ -265,6 +267,7 @@ pub fn chain_anchors(
     secondary_chain_threshold: f64,
     mismatch_rate: f64,
     max_mapq: f64,
+    query: &QuerySequence,
 ) -> Vec<Chain> {
     // ----- STEP 1 : finding the optimal chaining scores -----
 
@@ -318,6 +321,8 @@ pub fn chain_anchors(
                 a.best_predecessor_id = None;
 
                 let mut curr_chain = Chain::new();
+                curr_chain.query = query.clone();
+
                 curr_chain.anchors.push_back(a.clone());
                 curr_chain.score = a.max_chain_score;
 
@@ -568,6 +573,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
+            &QuerySequence::new()
         );
         assert!(chains.is_empty());
         //println!("Chains: {:#?}", chains);
@@ -600,6 +606,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
+            &QuerySequence::new()
         );
         assert!(!chains.is_empty());
         //println!("Chains_2: {:#?}", chains);
@@ -621,6 +628,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
+            &QuerySequence::new()
         );
         assert!(chains.is_empty());
     }

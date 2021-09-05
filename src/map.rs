@@ -3,7 +3,7 @@ use crate::index::Index;
 use crate::io::QuerySequence;
 
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::IntoParallelRefIterator;
+use rayon::prelude::{IntoParallelRefIterator, IntoParallelIterator};
 use std::fs::File;
 use std::io::Write;
 
@@ -25,9 +25,9 @@ pub fn map_reads(
     out_prefix: Option<&str>,
     dont_align: bool,
 ) {
-    let mut chains: Vec<Chain> = Vec::new();
-    let mut chains_gaf: Vec<GAFAlignment> = Vec::new();
-    let mut alignments: Vec<GAFAlignment> = Vec::new();
+    //let mut chains: Vec<Chain> = Vec::new();
+    //let mut chains_gaf: Vec<GAFAlignment> = Vec::new();
+    //let mut alignments: Vec<GAFAlignment> = Vec::new();
 
     // TODO: use start_id to disambiguate anchors in different for iterations?
     // i.e. the anchor 23 appeared multiple times in chains, that was because
@@ -35,7 +35,8 @@ pub fn map_reads(
     // the id is only relative to that specific seq_anchors
     //let mut start_id : anchor_id = 0;
 
-    for query in inputs {
+    let chains: Vec<Chain> = inputs.into_par_iter().flat_map(|query| {
+
         // First find the anchors, aka exact matches between
         // seqs and kmers in the index
         let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
@@ -50,13 +51,10 @@ pub fn map_reads(
             secondary_chain_threshold,
             max_mismatch_rate,
             max_mapq,
+            query
         );
 
-        // Convert chains to strings and do the same
-        let curr_chains_gaf: Vec<GAFAlignment> = seq_chains
-            .par_iter()
-            .map(|chain| GAFAlignment::from_chain(chain, query))
-            .collect();
+        seq_chains
 
         /*
         if !dont_align {
@@ -69,16 +67,13 @@ pub fn map_reads(
             alignments.extend(curr_alignments.into_iter());
         }
          */
-
-        // Add results to the ones from previous iterations
-        chains.extend(seq_chains.into_iter());
-        chains_gaf.extend(curr_chains_gaf.into_iter());
-    }
+    }).collect();
 
     if write_chains {
         if chains.is_empty() {
-            println!("No chains found!");
+            println!("No chain found!");
         } else {
+            let chains_gaf: Vec<GAFAlignment> = chains.par_iter().map(|c| GAFAlignment::from_chain(c)).collect();
             match out_prefix {
                 Some(prefix) => {
                     match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
@@ -94,6 +89,7 @@ pub fn map_reads(
             }
         }
     }
+
 }
 
 /// Store [chains_gaf_strings] in the file with name [file_name]

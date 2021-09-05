@@ -12,13 +12,21 @@ enum InputFileTypes {
     Fastq,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuerySequence {
     pub name: String,
     pub seq: String,
 }
 
 impl QuerySequence {
+
+    pub fn new() -> Self {
+        QuerySequence {
+            name: "".to_string(),
+            seq: "".to_string()
+        }
+    }
+
     // TODO: maybe an Option return type would be better
     pub fn split_into_kmers(&self, kmer_size: usize) -> Vec<String> {
         let mut seq_kmers: Vec<String> = Vec::new();
