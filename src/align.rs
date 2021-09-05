@@ -25,13 +25,13 @@ fn find_range_single_chain(index: &Index, chain: &Chain) -> Range<u64> {
     let min_node = chain
         .anchors
         .par_iter()
-        .map(|a| index.get_node_from_pos(a.target_begin.position as usize, a.target_begin.orient))
+        .map(|a| index.node_id_from_seqpos(&a.target_begin))
         .min()
         .unwrap();
     let max_node = chain
         .anchors
         .par_iter()
-        .map(|a| index.get_node_from_pos(a.target_end.position as usize, a.target_end.orient))
+        .map(|a| index.node_id_from_seqpos(&a.target_end))
         .max()
         .unwrap();
     min_node..max_node
@@ -43,27 +43,9 @@ pub fn extract_query_subsequence(
 ) -> Vec<String> {
     let subseqs: Vec<String> = chains
         .par_iter()
-        .map(|c| extract_single_subsequence(index, c.target_begin, c.target_end))
+        .map(|c| index.seq_from_start_end_seqpos(&c.target_begin, &c.target_end))
         .collect();
     subseqs
-}
-fn extract_single_subsequence(index: &Index, begin: SeqPos, end: SeqPos) -> String {
-    let substring = match (begin.orient, end.orient) {
-        (SeqOrient::Forward, SeqOrient::Forward) => index
-            .seq_fwd
-            .substring(begin.position as usize, end.position as usize)
-            .to_string(),
-        (SeqOrient::Reverse, SeqOrient::Reverse) => index
-            .seq_rev
-            .substring(begin.position as usize, end.position as usize)
-            .to_string(),
-        // TODO: this is 100% not right, maybe I should take a part from fwd and another from rev?
-        _ => index
-            .seq_fwd
-            .substring(begin.position as usize, end.position as usize)
-            .to_string(),
-    };
-    substring
 }
 /*
     GAF format

@@ -1,7 +1,5 @@
 use crate::dna::reverse_complement;
-use crate::kmer::{
-    generate_hash, generate_kmers, generate_pos_on_ref_2, GraphKmer, KmerPos, SeqOrient,
-};
+use crate::kmer::{generate_hash, generate_kmers, generate_pos_on_ref_2, GraphKmer, KmerPos, SeqOrient, SeqPos};
 use crate::serialization::{deserialize_object_from_file, serialize_object_to_file};
 use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
 
@@ -10,10 +8,13 @@ use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::ParallelSliceMut;
+use rayon::prelude::{ParallelSliceMut, IntoParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::kmer::KMER_POS_DELIMITER;
+use std::ops::Range;
+use substring::Substring;
+use rayon::iter::ParallelIterator;
 
 /// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
 #[derive(Debug)]
@@ -367,12 +368,12 @@ impl Index {
     // ------- Bitvec operations -------
 
     // Get in which node a certain position is
-    pub fn get_node_from_pos(&self, pos: usize, orient: SeqOrient) -> u64 {
-        let rank = self.get_bv_rank(pos) as u64;
+    pub fn node_id_from_seqpos(&self, pos: &SeqPos) -> u64 {
+        let rank = self.get_bv_rank(pos.position as usize) as u64;
 
-        let result = match orient {
+        let result = match pos.orient {
             SeqOrient::Forward => rank,
-            SeqOrient::Reverse => self.seq_bv.len() - rank,
+            SeqOrient::Reverse => self.n_nodes - rank + 1,
         };
 
         result
@@ -382,7 +383,9 @@ impl Index {
         assert!(pos < self.seq_bv.len() as usize);
 
         let mut rank: usize = 0;
-        for i in 0..pos {
+
+        // +1 because I want it to stop at pos (and not pos-1)
+        for i in 0..pos+1 {
             if self.seq_bv.get(i as u64) == true {
                 rank += 1;
             }
@@ -407,6 +410,50 @@ impl Index {
         select
     }
 
+    // -------
+
+    // ------- Various access methods for our Index -------
+
+    // TODO: maybe add some checks for input handle (not really necessary but...)
+    pub fn noderef_from_handle(&self, handle: &Handle) -> &NodeRef {
+        //Obtain id and remove 1 (because kmerpos are 0-based)
+        let node_ref_pos = (u64::from(handle.id())-1) as usize;
+        self.node_ref.get(node_ref_pos).unwrap()
+    }
+
+    pub fn edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+        let edges_interval = self.edges_interval_from_handle(handle);
+        let edges: &[Handle] = &self.edges[edges_interval];
+        edges
+    }
+
+    fn edges_interval_from_handle(&self, handle: &Handle) -> Range<usize> {
+        let node_ref_pos = (u64::from(handle.id())-1) as usize;
+
+        let node_ref = self.node_ref.get(node_ref_pos).unwrap();
+        let next_node_ref = self.node_ref.get(node_ref_pos+1).unwrap();
+
+        (node_ref.edge_idx as usize..next_node_ref.edge_idx as usize)
+    }
+
+    pub fn seq_from_start_end_seqpos(&self, begin: &SeqPos, end: &SeqPos) -> String {
+        let substring = match (begin.orient, end.orient) {
+            (SeqOrient::Forward, SeqOrient::Forward) => self
+                .seq_fwd
+                .substring(begin.position as usize, end.position as usize)
+                .to_string(),
+            (SeqOrient::Reverse, SeqOrient::Reverse) => self
+                .seq_rev
+                .substring(begin.position as usize, end.position as usize)
+                .to_string(),
+            // TODO: this is 100% not right, maybe I should take a part from fwd and another from rev?
+            _ => self
+                .seq_fwd
+                .substring(begin.position as usize, end.position as usize)
+                .to_string(),
+        };
+        substring
+    }
     // -------
 }
 
@@ -989,8 +1036,62 @@ mod test {
             let node_ref_pos = (u64::from(handle.id())-1) as usize;
 
             let node_ref = index.node_ref.get(node_ref_pos).unwrap();
-            println!("Handle: {:#?}, Node_ref: {:#?}", handle, node_ref);
+            println!("Handle: {:#?}, Nodeid: {}, Node_ref: {:#?}", handle, handle.id(), node_ref);
+            println!("REV Handle: {:#?}", handle.flip());
         }
+
+    }
+
+
+    #[test]
+    fn test_index_access_edges() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        for handle in graph.handles_iter().sorted() {
+            let node_ref_pos = (u64::from(handle.id())-1) as usize;
+
+            let node_ref = index.node_ref.get(node_ref_pos).unwrap();
+            let next_node_ref = index.node_ref.get(node_ref_pos+1).unwrap();
+
+            let edges_idx = node_ref.edge_idx;
+            let next_edges_idx = next_node_ref.edge_idx;
+
+            let edges: &[Handle] = &index.edges[edges_idx as usize..next_edges_idx as usize];
+            for edge in edges {
+                println!("Node: {}, Edge: {:#?}", handle.id(), edge);
+            }
+        }
+
+    }
+
+    #[test]
+    fn test_index_access_nodes() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        let pos1 = SeqPos {
+            orient: SeqOrient::Forward,
+            position: 0,
+        };
+        assert_eq!(index.node_id_from_seqpos(&pos1), 1); //First node_id is 1 even in the graph
+
+        //println!("BV: {:#?}", index.seq_bv);
+        //println!("FWD: {:#?}", index.seq_fwd);
+        let pos2 = SeqPos {
+            orient: SeqOrient::Forward,
+            position: 2,
+        };
+        assert_eq!(index.node_id_from_seqpos(&pos2), 2);
+
+        let pos3 = SeqPos {
+            orient: SeqOrient::Reverse,
+            position: 0,
+        };
+        assert_eq!(index.node_id_from_seqpos(&pos3), 4);
+
 
     }
 
