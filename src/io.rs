@@ -19,11 +19,10 @@ pub struct QuerySequence {
 }
 
 impl QuerySequence {
-
     pub fn new() -> Self {
         QuerySequence {
             name: "".to_string(),
-            seq: "".to_string()
+            seq: "".to_string(),
         }
     }
 

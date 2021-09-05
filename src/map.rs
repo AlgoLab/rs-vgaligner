@@ -3,7 +3,7 @@ use crate::index::Index;
 use crate::io::QuerySequence;
 
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::{IntoParallelRefIterator, IntoParallelIterator};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
@@ -35,45 +35,50 @@ pub fn map_reads(
     // the id is only relative to that specific seq_anchors
     //let mut start_id : anchor_id = 0;
 
-    let chains: Vec<Chain> = inputs.into_par_iter().flat_map(|query| {
+    let chains: Vec<Chain> = inputs
+        .into_par_iter()
+        .flat_map(|query| {
+            // First find the anchors, aka exact matches between
+            // seqs and kmers in the index
+            let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
 
-        // First find the anchors, aka exact matches between
-        // seqs and kmers in the index
-        let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
+            // Chain close anchors together to find longer matches
+            let seq_chains: Vec<Chain> = chain_anchors(
+                &mut seq_anchors,
+                index.kmer_length,
+                bandwidth,
+                max_gap,
+                chain_min_n_anchors,
+                secondary_chain_threshold,
+                max_mismatch_rate,
+                max_mapq,
+                query,
+            );
 
-        // Chain close anchors together to find longer matches
-        let seq_chains: Vec<Chain> = chain_anchors(
-            &mut seq_anchors,
-            index.kmer_length,
-            bandwidth,
-            max_gap,
-            chain_min_n_anchors,
-            secondary_chain_threshold,
-            max_mismatch_rate,
-            max_mapq,
-            query
-        );
+            seq_chains
 
-        seq_chains
-
-        /*
-        if !dont_align {
-            println!("NOT DONT ALIGN");
-            // POA stuff
-            let curr_alignments: Vec<GAFAlignment> = seq_chains
-                .par_iter()
-                .map(|chain| obtain_base_level_alignment(index, chain, query))
-                .collect();
-            alignments.extend(curr_alignments.into_iter());
-        }
-         */
-    }).collect();
+            /*
+            if !dont_align {
+                println!("NOT DONT ALIGN");
+                // POA stuff
+                let curr_alignments: Vec<GAFAlignment> = seq_chains
+                    .par_iter()
+                    .map(|chain| obtain_base_level_alignment(index, chain, query))
+                    .collect();
+                alignments.extend(curr_alignments.into_iter());
+            }
+             */
+        })
+        .collect();
 
     if write_chains {
         if chains.is_empty() {
             println!("No chain found!");
         } else {
-            let chains_gaf: Vec<GAFAlignment> = chains.par_iter().map(|c| GAFAlignment::from_chain(c)).collect();
+            let chains_gaf: Vec<GAFAlignment> = chains
+                .par_iter()
+                .map(|c| GAFAlignment::from_chain(c))
+                .collect();
             match out_prefix {
                 Some(prefix) => {
                     match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
@@ -89,7 +94,6 @@ pub fn map_reads(
             }
         }
     }
-
 }
 
 /// Store [chains_gaf_strings] in the file with name [file_name]

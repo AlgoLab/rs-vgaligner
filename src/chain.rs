@@ -114,7 +114,7 @@ pub struct Chain {
     pub is_secondary: bool,
     pub target_begin: SeqPos,
     pub target_end: SeqPos,
-    pub query: QuerySequence
+    pub query: QuerySequence,
 }
 impl PartialEq for Chain {
     fn eq(&self, other: &Self) -> bool {
@@ -573,7 +573,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
-            &QuerySequence::new()
+            &QuerySequence::new(),
         );
         assert!(chains.is_empty());
         //println!("Chains: {:#?}", chains);
@@ -606,7 +606,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
-            &QuerySequence::new()
+            &QuerySequence::new(),
         );
         assert!(!chains.is_empty());
         //println!("Chains_2: {:#?}", chains);
@@ -628,7 +628,7 @@ mod test {
             0.5f64,
             0.1f64,
             60.0f64,
-            &QuerySequence::new()
+            &QuerySequence::new(),
         );
         assert!(chains.is_empty());
     }

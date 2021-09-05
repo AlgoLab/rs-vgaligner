@@ -24,55 +24,12 @@ pub enum SeqOrient {
     Forward,
     Reverse,
 }
-/*
-impl Ord for SeqOrient {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (SeqOrient::Forward, SeqOrient::Forward) => Ordering::Equal,
-            (SeqOrient::Reverse, SeqOrient::Reverse) => Ordering::Equal,
-            (SeqOrient::Forward, SeqOrient::Reverse) => Ordering::Less,
-            (SeqOrient::Reverse, SeqOrient::Forward) => Ordering::Greater,
-        }
-    }
-}
-impl PartialOrd for SeqOrient {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for SeqOrient {
-    fn eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
- */
 
 #[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
 pub struct SeqPos {
     pub orient: SeqOrient,
     pub position: u64,
 }
-/*
-impl Ord for SeqPos {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.orient.cmp(&other.orient) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater => Ordering::Greater,
-            Ordering::Equal => self.position.cmp(&other.position)
-        }
-    }
-}
-impl PartialOrd for SeqPos {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl PartialEq for SeqPos {
-    fn eq(&self, other: &Self) -> bool {
-        self.position == other.position && self.orient == other.orient
-    }
-}
- */
 impl SeqPos {
     pub fn new(orient: SeqOrient, position: u64) -> Self {
         SeqPos { orient, position }
@@ -313,6 +270,217 @@ pub fn generate_kmers(
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     complete_kmers.dedup();
+
+    complete_kmers
+}
+
+pub fn generate_kmers_parallel(
+    graph: &HashGraph,
+    k: u64,
+    edge_max: Option<u64>,
+    degree_max: Option<u64>,
+) -> Vec<GraphKmer> {
+    // Get a Vec for rayon
+    let mut sorted_graph_handles: Vec<Handle> = graph.handles_iter().collect();
+    sorted_graph_handles.par_sort();
+
+    let mut complete_kmers: Vec<GraphKmer> = sorted_graph_handles
+        .par_iter()
+        .flat_map(|handle| find_kmers_starting_in_handle(&handle, &graph, k, edge_max, degree_max))
+        .collect();
+
+    // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
+    // Note that the same kmer can appear in different places
+    // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
+    complete_kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
+    // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
+    // on consecutive duplicates, so only by sorting beforehand it works correctly.
+    complete_kmers.dedup();
+
+    complete_kmers
+}
+
+fn find_kmers_starting_in_handle(
+    forward_handle: &Handle,
+    graph: &HashGraph,
+    k: u64,
+    edge_max: Option<u64>,
+    degree_max: Option<u64>,
+) -> Vec<GraphKmer> {
+    // Try all possible orientations
+    [true, false]
+        .par_iter()
+        .flat_map(|handle_orient| {
+            let mut handle: Handle;
+            let mut orient: bool;
+
+            match handle_orient {
+                true => {
+                    handle = forward_handle.clone();
+                    orient = true;
+                }
+                false => {
+                    handle = forward_handle.flip();
+                    orient = false;
+                }
+            }
+
+            generate_kmer_with_handle_orient(graph, handle, orient, k, edge_max, degree_max)
+        })
+        .collect()
+}
+
+fn generate_kmer_with_handle_orient(
+    graph: &HashGraph,
+    handle_in: Handle,
+    orient: bool,
+    k: u64,
+    edge_max: Option<u64>,
+    degree_max: Option<u64>,
+) -> Vec<GraphKmer> {
+    let mut handle: Handle = handle_in.clone();
+    let mut complete_kmers: Vec<GraphKmer> = Vec::new();
+
+    // Check if the handle has more outgoing edges than the maximum allowed,
+    // and if that's the case, skip the current handle
+    if let Some(degree_max) = degree_max {
+        let mut curr_count: u64 = 0;
+        graph
+            .handle_edges_iter(handle, Direction::Right)
+            .for_each(|_| {
+                curr_count += 1;
+            });
+        if curr_count > degree_max {
+            // Skip current orientation
+            return Vec::new();
+        }
+    }
+
+    // Get current node/handle
+    let mut handle_seq = graph.sequence(handle).into_string_lossy();
+    let mut handle_length = handle_seq.len() as u64;
+
+    // This will store kmers that have not yet reached size k, which
+    // will have to be completed from the neighbours of the handle
+    let mut incomplete_kmers: Vec<GraphKmer> = Vec::new();
+
+    // Try generating the "internal" kmers from the given handle
+    for i in 0..handle_length {
+        let begin = i;
+        let end = min(i + k, handle_length);
+        let kmer = GraphKmer {
+            seq: handle_seq
+                .substring(begin as usize, end as usize)
+                .to_string(),
+            begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
+            end: SeqPos::new_from_bool(handle.is_reverse(), end),
+            first_handle: handle,
+            last_handle: handle,
+            handle_orient: orient,
+            forks: 0,
+        };
+
+        // Ignore Ns in kmer generation
+        if kmer.seq.contains('N') {
+            return Vec::new();
+        }
+
+        // If the kmer has already reached size k...
+        // NOTE: this implies that the sequence encoded by the current handle
+        // has size >= k
+        if (kmer.seq.len() as u64) == k {
+            //if !complete_kmers.contains(&kmer) {
+            complete_kmers.push(kmer);
+            //}
+        } else {
+            // The kmer is incomplete, thus will have to be completed to reach size k
+
+            // Check that eventual limits have not been reach yet, otherwise ignore
+            // this kmer
+
+            let mut next_count: u64 = 0;
+            if edge_max.is_some() || degree_max.is_some() {
+                graph
+                    .handle_edges_iter(handle, Direction::Right)
+                    .for_each(|_| {
+                        next_count += 1;
+                    });
+            }
+
+            if (degree_max.is_none() && edge_max.is_none())
+                || (degree_max.is_some() && next_count < degree_max.unwrap())
+                || (edge_max.is_some() && kmer.forks < edge_max.unwrap())
+            {
+                // Create a copy of the incomplete kmer for each neighbour handle,
+                // so that they can be completed
+
+                for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
+                    let mut inc_kmer = kmer.clone();
+                    inc_kmer.last_handle = neighbor;
+
+                    if next_count > 1 {
+                        inc_kmer.forks += 1;
+                    }
+
+                    incomplete_kmers.push(inc_kmer);
+                }
+            }
+        }
+    }
+
+    // Then complete all incomplete kmers
+    while let Some(mut incomplete_kmer) = incomplete_kmers.pop() {
+        handle = incomplete_kmer.last_handle;
+        handle_seq = graph.sequence(handle).into_string_lossy();
+        handle_length = handle_seq.len() as u64;
+
+        let end = min(k - (incomplete_kmer.seq.len() as u64), handle_length);
+        let str_to_add = handle_seq.substring(0, end as usize).to_string();
+        incomplete_kmer.extend_kmer(str_to_add, handle);
+
+        // Ignore Ns during kmer generation
+        if incomplete_kmer.seq.contains('N') {
+            return Vec::new();
+        }
+
+        if (incomplete_kmer.seq.len() as u64) == k {
+            //if !complete_kmers.contains(&incomplete_kmer) {
+            complete_kmers.push(incomplete_kmer);
+            //}
+        } else {
+            // NOTE: if there is no neighbor, the kmer does not get re-added
+            // to the incomplete ones, so that the external loop can end
+            for neighbor in graph.handle_edges_iter(handle, Direction::Right) {
+                let mut next_count: u64 = 0;
+                if edge_max.is_some() || degree_max.is_some() {
+                    graph
+                        .handle_edges_iter(handle, Direction::Right)
+                        .for_each(|_| {
+                            next_count += 1;
+                        });
+                }
+
+                if (degree_max.is_none() && edge_max.is_none())
+                    || (degree_max.is_some() && next_count < degree_max.unwrap())
+                    || (edge_max.is_some() && incomplete_kmer.forks < edge_max.unwrap())
+                {
+                    let mut inc_kmer = incomplete_kmer.clone();
+                    inc_kmer.add_handle_to_complete(neighbor);
+
+                    if next_count > 1 {
+                        inc_kmer.forks += 1;
+                    }
+
+                    incomplete_kmers.push(inc_kmer);
+                }
+            }
+        }
+    }
+
+    // IMPORTANT NOTE: a single iteration (of the most external for loop) completes
+    // ALL possible kmers that start in the given handle. If the graph "ends" but the
+    // kmer cannot reach size k (i.e. it is incomplete) it gets discarded.
+    assert!(incomplete_kmers.is_empty());
 
     complete_kmers
 }
