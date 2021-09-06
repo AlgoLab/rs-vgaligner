@@ -7,7 +7,7 @@ use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
-use crate::align::{obtain_base_level_alignment, GAFAlignment};
+use crate::align::{obtain_base_level_alignment, GAFAlignment, obtain_base_level_alignment_handle};
 use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
@@ -81,8 +81,8 @@ pub fn map_reads(
 
     if !dont_align {
         let alignments: Vec<GAFAlignment> = chains
-            .par_iter()
-            .map(|chain| obtain_base_level_alignment(index, chain))
+            .iter()
+            .map(|chain| obtain_base_level_alignment_handle(index, chain))
             .collect();
 
         if alignments.is_empty() {

@@ -394,8 +394,8 @@ impl Index {
     pub fn handle_from_seqpos(&self, pos: &SeqPos) -> Handle {
         let node_id = self.node_id_from_seqpos(pos);
         let handle = match pos.orient {
-            SeqOrient::Forward => Handle::from_integer(node_id*2),
-            SeqOrient::Reverse => Handle::from_integer(node_id*2+1)
+            SeqOrient::Forward => Handle::from_integer(node_id * 2),
+            SeqOrient::Reverse => Handle::from_integer(node_id * 2 + 1),
         };
         handle
     }
@@ -450,15 +450,21 @@ impl Index {
         let curr_node_ref = self.noderef_from_handle(handle);
         let curr_handle_pos = self.noderef_pos_from_handle(handle);
 
-        let next_node_ref = self.node_ref.get(curr_handle_pos+1).unwrap();
+        let next_node_ref = self.node_ref.get(curr_handle_pos + 1).unwrap();
         let ref_seq: String = match handle.is_reverse() {
             false => self.seq_fwd.clone(),
             _ => self.seq_rev.clone(),
         };
 
-        let (start,end): (usize, usize) = match handle.is_reverse() {
-            false => (curr_node_ref.seq_idx as usize, next_node_ref.seq_idx as usize),
-            _ => (ref_seq.len() - next_node_ref.seq_idx as usize, ref_seq.len() - curr_node_ref.seq_idx as usize)
+        let (start, end): (usize, usize) = match handle.is_reverse() {
+            false => (
+                curr_node_ref.seq_idx as usize,
+                next_node_ref.seq_idx as usize,
+            ),
+            _ => (
+                ref_seq.len() - next_node_ref.seq_idx as usize,
+                ref_seq.len() - curr_node_ref.seq_idx as usize,
+            ),
         };
 
         ref_seq.substring(start, end).to_string()
@@ -528,9 +534,9 @@ mod test {
 
     use super::*;
 
+    use bstr::ByteVec;
     use itertools::Itertools;
     use substring::Substring;
-    use bstr::ByteVec;
 
     /// This function creates a simple graph, used for debugging
     ///          | 2: CT \
@@ -1257,13 +1263,18 @@ mod test {
 
         let begin2 = SeqPos::new(SeqOrient::Reverse, 0);
         let end2 = SeqPos::new(SeqOrient::Reverse, index.seq_length);
-        assert_eq!(index.seq_from_start_end_seqpos(&begin2, &end2), index.seq_rev);
+        assert_eq!(
+            index.seq_from_start_end_seqpos(&begin2, &end2),
+            index.seq_rev
+        );
 
         let begin3 = SeqPos::new(SeqOrient::Forward, 0);
         let end3 = SeqPos::new(SeqOrient::Forward, 3);
-        assert_eq!(index.seq_from_start_end_seqpos(&begin3, &end3), "ACT".to_string());
+        assert_eq!(
+            index.seq_from_start_end_seqpos(&begin3, &end3),
+            "ACT".to_string()
+        );
     }
-
 
     #[test]
     fn test_seq_from_handle() {
@@ -1275,11 +1286,23 @@ mod test {
 
         //println!("FWD: {:#?} REV: {:#?}", index.seq_fwd, index.seq_rev);
         for handle in handles {
-            assert_eq!(graph.sequence(handle).into_string_lossy() ,index.seq_from_handle(&handle));
+            assert_eq!(
+                graph.sequence(handle).into_string_lossy(),
+                index.seq_from_handle(&handle)
+            );
             let rev = handle.clone().flip();
-            println!("ID is: {} Handle is: {:#?}, ID Rev is: {} Rev handle is: {:#?}", handle.id(), handle, rev.id(), rev);
+            println!(
+                "ID is: {} Handle is: {:#?}, ID Rev is: {} Rev handle is: {:#?}",
+                handle.id(),
+                handle,
+                rev.id(),
+                rev
+            );
             //println!("FWD seq: {:#?}, REV seq: {:#?}", graph.sequence(handle).into_string_lossy(), graph.sequence(rev).into_string_lossy());
-            assert_eq!(graph.sequence(rev).into_string_lossy() ,index.seq_from_handle(&rev))
+            assert_eq!(
+                graph.sequence(rev).into_string_lossy(),
+                index.seq_from_handle(&rev)
+            )
         }
     }
 
@@ -1295,6 +1318,9 @@ mod test {
         assert_eq!(index.handle_from_seqpos(&p1), *handles.get(0).unwrap());
 
         let p2: SeqPos = SeqPos::new(SeqOrient::Reverse, 0);
-        assert_eq!(index.handle_from_seqpos(&p2), handles.get(3).unwrap().flip());
+        assert_eq!(
+            index.handle_from_seqpos(&p2),
+            handles.get(3).unwrap().flip()
+        );
     }
 }
