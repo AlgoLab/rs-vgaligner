@@ -391,6 +391,15 @@ impl Index {
         result
     }
 
+    pub fn handle_from_seqpos(&self, pos: &SeqPos) -> Handle {
+        let node_id = self.node_id_from_seqpos(pos);
+        let handle = match pos.orient {
+            SeqOrient::Forward => Handle::from_integer(node_id*2),
+            SeqOrient::Reverse => Handle::from_integer(node_id*2+1)
+        };
+        handle
+    }
+
     pub fn get_bv_rank(&self, pos: usize) -> usize {
         assert!(pos < self.seq_bv.len() as usize);
 
@@ -427,10 +436,32 @@ impl Index {
     // ------- Various access methods for our Index -------
 
     // TODO: maybe add some checks for input handle (not really necessary but...)
+    pub fn noderef_pos_from_handle(&self, handle: &Handle) -> usize {
+        (u64::from(handle.id()) - 1) as usize
+    }
+
     pub fn noderef_from_handle(&self, handle: &Handle) -> &NodeRef {
         //Obtain id and remove 1 (because kmerpos are 0-based)
-        let node_ref_pos = (u64::from(handle.id()) - 1) as usize;
+        let node_ref_pos = self.noderef_pos_from_handle(handle);
         self.node_ref.get(node_ref_pos).unwrap()
+    }
+
+    pub fn seq_from_handle(&self, handle: &Handle) -> String {
+        let curr_node_ref = self.noderef_from_handle(handle);
+        let curr_handle_pos = self.noderef_pos_from_handle(handle);
+
+        let next_node_ref = self.node_ref.get(curr_handle_pos+1).unwrap();
+        let ref_seq: String = match handle.is_reverse() {
+            false => self.seq_fwd.clone(),
+            _ => self.seq_rev.clone(),
+        };
+
+        let (start,end): (usize, usize) = match handle.is_reverse() {
+            false => (curr_node_ref.seq_idx as usize, next_node_ref.seq_idx as usize),
+            _ => (ref_seq.len() - next_node_ref.seq_idx as usize, ref_seq.len() - curr_node_ref.seq_idx as usize)
+        };
+
+        ref_seq.substring(start, end).to_string()
     }
 
     pub fn edges_from_handle(&self, handle: &Handle) -> &[Handle] {
@@ -499,6 +530,7 @@ mod test {
 
     use itertools::Itertools;
     use substring::Substring;
+    use bstr::ByteVec;
 
     /// This function creates a simple graph, used for debugging
     ///          | 2: CT \
@@ -1230,5 +1262,39 @@ mod test {
         let begin3 = SeqPos::new(SeqOrient::Forward, 0);
         let end3 = SeqPos::new(SeqOrient::Forward, 3);
         assert_eq!(index.seq_from_start_end_seqpos(&begin3, &end3), "ACT".to_string());
+    }
+
+
+    #[test]
+    fn test_seq_from_handle() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+        let mut handles: Vec<Handle> = graph.handles_iter().collect();
+        handles.sort();
+
+        //println!("FWD: {:#?} REV: {:#?}", index.seq_fwd, index.seq_rev);
+        for handle in handles {
+            assert_eq!(graph.sequence(handle).into_string_lossy() ,index.seq_from_handle(&handle));
+            let rev = handle.clone().flip();
+            println!("ID is: {} Handle is: {:#?}, ID Rev is: {} Rev handle is: {:#?}", handle.id(), handle, rev.id(), rev);
+            //println!("FWD seq: {:#?}, REV seq: {:#?}", graph.sequence(handle).into_string_lossy(), graph.sequence(rev).into_string_lossy());
+            assert_eq!(graph.sequence(rev).into_string_lossy() ,index.seq_from_handle(&rev))
+        }
+    }
+
+    #[test]
+    fn test_handle_from_seqpos() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+        let mut handles: Vec<Handle> = graph.handles_iter().collect();
+        handles.sort();
+
+        let p1: SeqPos = SeqPos::new(SeqOrient::Forward, 0);
+        assert_eq!(index.handle_from_seqpos(&p1), *handles.get(0).unwrap());
+
+        let p2: SeqPos = SeqPos::new(SeqOrient::Reverse, 0);
+        assert_eq!(index.handle_from_seqpos(&p2), handles.get(3).unwrap().flip());
     }
 }
