@@ -1212,4 +1212,23 @@ mod test {
             &vec![]
         );
     }
+
+    #[test]
+    fn test_index_seq_from_start_end_seqpos() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        let begin = SeqPos::new(SeqOrient::Forward, 0);
+        let end = SeqPos::new(SeqOrient::Forward, index.seq_length);
+        assert_eq!(index.seq_from_start_end_seqpos(&begin, &end), index.seq_fwd);
+
+        let begin2 = SeqPos::new(SeqOrient::Reverse, 0);
+        let end2 = SeqPos::new(SeqOrient::Reverse, index.seq_length);
+        assert_eq!(index.seq_from_start_end_seqpos(&begin2, &end2), index.seq_rev);
+
+        let begin3 = SeqPos::new(SeqOrient::Forward, 0);
+        let end3 = SeqPos::new(SeqOrient::Forward, 3);
+        assert_eq!(index.seq_from_start_end_seqpos(&begin3, &end3), "ACT".to_string());
+    }
 }
