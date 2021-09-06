@@ -25,10 +25,6 @@ pub fn map_reads(
     out_prefix: Option<&str>,
     dont_align: bool,
 ) {
-    //let mut chains: Vec<Chain> = Vec::new();
-    //let mut chains_gaf: Vec<GAFAlignment> = Vec::new();
-    //let mut alignments: Vec<GAFAlignment> = Vec::new();
-
     // TODO: use start_id to disambiguate anchors in different for iterations?
     // i.e. the anchor 23 appeared multiple times in chains, that was because
     // in each for iteration I use as anchor_ids (0..seq_anchors.len()), therefore
@@ -56,18 +52,6 @@ pub fn map_reads(
             );
 
             seq_chains
-
-            /*
-            if !dont_align {
-                println!("NOT DONT ALIGN");
-                // POA stuff
-                let curr_alignments: Vec<GAFAlignment> = seq_chains
-                    .par_iter()
-                    .map(|chain| obtain_base_level_alignment(index, chain, query))
-                    .collect();
-                alignments.extend(curr_alignments.into_iter());
-            }
-             */
         })
         .collect();
 
@@ -88,6 +72,34 @@ pub fn map_reads(
                 }
                 _ => {
                     for gaf_str in chains_gaf {
+                        println!("{:#?}", gaf_str);
+                    }
+                }
+            }
+        }
+    }
+
+    if !dont_align {
+        let alignments: Vec<GAFAlignment> = chains
+            .par_iter()
+            .map(|chain| obtain_base_level_alignment(index, chain))
+            .collect();
+
+        if alignments.is_empty() {
+            println!("No alignment found!");
+        } else {
+            match out_prefix {
+                Some(prefix) => {
+                    match write_gaf_to_file(
+                        &alignments,
+                        prefix.clone().to_string() + "-aligned" + ".gaf",
+                    ) {
+                        Err(e) => panic!("{}", e),
+                        _ => println!("Alignments stored correctly!"),
+                    }
+                }
+                _ => {
+                    for gaf_str in alignments {
                         println!("{:#?}", gaf_str);
                     }
                 }

@@ -448,6 +448,24 @@ impl Index {
         (node_ref.edge_idx as usize..next_node_ref.edge_idx as usize)
     }
 
+    pub fn incoming_edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+        let edges_interval = self.edges_interval_from_handle(handle);
+        let node_ref = self.noderef_from_handle(handle);
+        let incoming_edges_interval =
+            (edges_interval.start..edges_interval.start + node_ref.edges_to_node as usize);
+        let incoming_edges: &[Handle] = &self.edges[incoming_edges_interval];
+        incoming_edges
+    }
+
+    pub fn outgoing_edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+        let edges_interval = self.edges_interval_from_handle(handle);
+        let node_ref = self.noderef_from_handle(handle);
+        let outgoing_edges_interval =
+            (edges_interval.start + node_ref.edges_to_node as usize..edges_interval.end);
+        let outgoing_edges: &[Handle] = &self.edges[outgoing_edges_interval];
+        outgoing_edges
+    }
+
     pub fn seq_from_start_end_seqpos(&self, begin: &SeqPos, end: &SeqPos) -> String {
         let substring = match (begin.orient, end.orient) {
             (SeqOrient::Forward, SeqOrient::Forward) => self
@@ -1118,5 +1136,80 @@ mod test {
         let kmers_on_graph2 = generate_kmers(&graph2, 3, Some(100), Some(100));
         let kmers_on_graph_parallel2 = generate_kmers_parallel(&graph2, 3, Some(100), Some(100));
         assert_eq!(kmers_on_graph2, kmers_on_graph_parallel2)
+    }
+
+    #[test]
+    fn test_edges_from_handle() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+        let mut handles: Vec<Handle> = graph.handles_iter().collect();
+        handles.sort();
+
+        assert_eq!(
+            index.edges_from_handle(handles.get(0).unwrap()),
+            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+        );
+        assert_eq!(
+            index.edges_from_handle(handles.get(1).unwrap()),
+            &vec![*handles.get(0).unwrap(), *handles.get(3).unwrap()]
+        );
+        assert_eq!(
+            index.edges_from_handle(handles.get(2).unwrap()),
+            &vec![*handles.get(0).unwrap(), *handles.get(3).unwrap()]
+        );
+        assert_eq!(
+            index.edges_from_handle(handles.get(3).unwrap()),
+            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+        );
+    }
+
+    #[test]
+    fn test_index_incoming_outgoing_edges() {
+        // Build the index
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+
+        let mut handles: Vec<Handle> = graph.handles_iter().collect();
+        handles.sort();
+        println!("Handles: {:#?}", handles);
+        println!("Edges: {:#?}", index.edges);
+        println!("NodeRef: {:#?}", index.node_ref);
+
+        assert_eq!(
+            index.incoming_edges_from_handle(handles.get(0).unwrap()),
+            &vec![]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(handles.get(0).unwrap()),
+            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+        );
+
+        assert_eq!(
+            index.incoming_edges_from_handle(handles.get(1).unwrap()),
+            &vec![*handles.get(0).unwrap()]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(handles.get(1).unwrap()),
+            &vec![*handles.get(3).unwrap()]
+        );
+
+        assert_eq!(
+            index.incoming_edges_from_handle(handles.get(2).unwrap()),
+            &vec![*handles.get(0).unwrap()]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(handles.get(2).unwrap()),
+            &vec![*handles.get(3).unwrap()]
+        );
+
+        assert_eq!(
+            index.incoming_edges_from_handle(handles.get(3).unwrap()),
+            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(handles.get(3).unwrap()),
+            &vec![]
+        );
     }
 }

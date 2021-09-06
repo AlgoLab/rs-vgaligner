@@ -13,6 +13,38 @@ use rayon::prelude::*;
 use std::ops::Range;
 use substring::Substring;
 
+pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
+    // Find the range implied by the chain (on the graph!!!)
+    let po_range = find_range_single_chain(index, chain);
+
+    // Find nodes and edges
+    let (nodes, edges) = find_nodes_edges_2(&index, &po_range);
+
+    // TODO: possibly avoid this
+    let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
+    let edges_usize: Vec<(usize, usize)> = edges
+        .into_par_iter()
+        .map(|x| (x.0 as usize, x.1 as usize))
+        .collect();
+
+    // Find subquery implied by the chain
+    let subquery_range = chain.find_query_start_end();
+    let subquery = chain
+        .query
+        .seq
+        .to_string()
+        .substring(subquery_range.start as usize, subquery_range.end as usize)
+        .to_string();
+
+    // Align with abpoa
+    let mut result = AbpoaAlignmentResult::new();
+    unsafe {
+        result = align_with_poa(&nodes_str, &edges_usize, subquery.as_str());
+    }
+    let alignment: GAFAlignment = generate_alignment(chain, &result);
+    alignment
+}
+
 /// Find the leftmost starting node(handle) and rightmost node(handle) for each chain
 pub fn extract_graph_po_range(index: &Index, chains: &Vec<Chain>) -> Vec<Range<u64>> {
     let start_end_vec: Vec<Range<u64>> = chains
@@ -117,41 +149,6 @@ impl GAFAlignment {
             self.notes
         )
     }
-}
-pub(crate) fn obtain_base_level_alignment(
-    index: &Index,
-    chain: &Chain,
-    query: &QuerySequence,
-) -> GAFAlignment {
-    // Find the range implied by the chain (on the graph!!!)
-    let po_range = find_range_single_chain(index, chain);
-
-    // Find nodes and edges
-    let (nodes, edges) = find_nodes_edges_2(&index, &po_range);
-
-    // TODO: possibly avoid this
-    let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
-    let edges_usize: Vec<(usize, usize)> = edges
-        .into_par_iter()
-        .map(|x| (x.0 as usize, x.1 as usize))
-        .collect();
-
-    /* -- this is wrong, the whole query should be aligned --
-    // Find subquery implied by the chain
-    let subquery_range = chain.find_query_start_end();
-    let subquery = query
-        .to_string()
-        .substring(subquery_range.start as usize, subquery_range.end as usize)
-        .to_string();
-     */
-
-    // Align with abpoa
-    let mut result = AbpoaAlignmentResult::new();
-    unsafe {
-        result = align_with_poa(&nodes_str, &edges_usize, query.seq.as_str());
-    }
-    let alignment: GAFAlignment = generate_alignment(chain, &result);
-    alignment
 }
 
 /*

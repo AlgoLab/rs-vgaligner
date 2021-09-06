@@ -124,7 +124,7 @@ subcommands:
                 help: write superchains for each alignment
                 required: false
                 takes_value: false
-            - dont_align:
+            - dont-align:
                 short: D
                 long: dont-align
                 help: don't align, just chain
