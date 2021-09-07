@@ -45,7 +45,7 @@ impl SeqPos {
 }
 
 /// Represents a kmer in the graph
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GraphKmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
@@ -54,10 +54,10 @@ pub struct GraphKmer {
     /// The end position relative to the handle
     pub(crate) end: SeqPos,
     /// The first handle of the kmer
-    #[serde(with = "SerializableHandle")]
+    //#[serde(with = "SerializableHandle")]
     pub(crate) first_handle: Handle,
     /// The last handle of the kmer
-    #[serde(with = "SerializableHandle")]
+    //#[serde(with = "SerializableHandle")]
     pub(crate) last_handle: Handle,
     /// The orientation of the handles
     pub(crate) handle_orient: bool,

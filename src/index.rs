@@ -11,16 +11,21 @@ use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::{IntoParallelIterator, ParallelSliceMut};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 
 use crate::kmer::KMER_POS_DELIMITER;
+use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
 use std::ops::Range;
 use substring::Substring;
 
+use crate::serialization::SerializableHandle;
+use crate::serialization::{handle_vec_deser, handle_vec_ser};
+use serde_with::{serde_as, DisplayFromStr};
+
 /// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
     /// The kmer size that this graph was built on
     pub kmer_length: u64,
@@ -42,6 +47,8 @@ pub struct Index {
     n_edges: u64,
     // what's the most-efficient graph topology we can store?
     /// Edges of the input graph
+    #[serde(serialize_with = "handle_vec_ser")]
+    #[serde(deserialize_with = "handle_vec_deser")]
     pub edges: Vec<Handle>,
     /// Node count of the input graph
     n_nodes: u64,
@@ -240,7 +247,7 @@ impl Index {
                 n_kmer_positions: index.kmer_pos_table.len() as u64,
             };
 
-            match index.store_with_prefix(meta, out_prefix.to_string()) {
+            match index.store_with_prefix(out_prefix.to_string()) {
                 Err(e) => panic!("{}", e),
                 _ => println!("Index stored correctly!"),
             }
@@ -250,11 +257,13 @@ impl Index {
     }
 
     /// Store the index in a location with prefix [out_prefix]
-    fn store_with_prefix(&self, meta: Metadata, out_prefix: String) -> std::io::Result<()> {
+    fn store_with_prefix(&self, out_prefix: String) -> std::io::Result<()> {
+        /*
         serialize_object_to_file(&self.seq_fwd, out_prefix.clone() + ".sqf")?;
         serialize_object_to_file(&self.seq_rev, out_prefix.clone() + ".sqr")?;
         serialize_object_to_file(&self.node_ref, out_prefix.clone() + ".gyn")?;
         serialize_object_to_file(&self.seq_bv, out_prefix.clone() + ".sbv")?;
+        //serialize_object_to_file(&self.edges, out_prefix.clone() + ".edg")?;
 
         //serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
 
@@ -264,15 +273,20 @@ impl Index {
         serialize_object_to_file(&self.bhpf, out_prefix.clone() + ".bbx")?;
 
         serialize_object_to_file(&meta, out_prefix.clone() + ".mtd")?;
+         */
+
+        serialize_object_to_file(&self, out_prefix.clone() + ".idx")?;
 
         Ok(())
     }
 
     pub fn load_from_prefix(out_prefix: String) -> Self {
+        /*
         let seq_fwd: String = deserialize_object_from_file(out_prefix.clone() + ".sqf");
         let seq_rev: String = deserialize_object_from_file(out_prefix.clone() + ".sqr");
         let node_ref: Vec<NodeRef> = deserialize_object_from_file(out_prefix.clone() + ".gyn");
         let seq_bv: BitVec = deserialize_object_from_file(out_prefix.clone() + ".sbv");
+        //let edges: Vec<Handle> = deserialize_object_from_file(out_prefix.clone() + ".edg");
 
         //let kmers_on_graph: Vec<Kmer> =
         //    deserialize_object_from_file(out_prefix.clone() + ".kgph");
@@ -303,6 +317,11 @@ impl Index {
             kmer_pos_table: kmer_positions_on_ref,
             loaded: true,
         }
+
+         */
+
+        let index: Index = deserialize_object_from_file(out_prefix.to_string() + ".idx");
+        index
     }
 
     /// Find the starting position of a certain kmer with seq [`seq`] in the index
@@ -436,6 +455,7 @@ impl Index {
     // ------- Various access methods for our Index -------
 
     // TODO: maybe add some checks for input handle (not really necessary but...)
+
     pub fn noderef_pos_from_handle(&self, handle: &Handle) -> usize {
         (u64::from(handle.id()) - 1) as usize
     }
@@ -471,12 +491,16 @@ impl Index {
     }
 
     pub fn edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+        assert!(u64::from(handle.id()) <= self.n_nodes);
+
         let edges_interval = self.edges_interval_from_handle(handle);
         let edges: &[Handle] = &self.edges[edges_interval];
         edges
     }
 
     fn edges_interval_from_handle(&self, handle: &Handle) -> Range<usize> {
+        assert!(u64::from(handle.id()) <= self.n_nodes);
+
         let node_ref_pos = (u64::from(handle.id()) - 1) as usize;
 
         let node_ref = self.node_ref.get(node_ref_pos).unwrap();
@@ -485,21 +509,49 @@ impl Index {
         (node_ref.edge_idx as usize..next_node_ref.edge_idx as usize)
     }
 
-    pub fn incoming_edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+    pub fn incoming_edges_from_handle(&self, handle: &Handle) -> Vec<Handle> {
+        assert!(u64::from(handle.id()) <= self.n_nodes);
+
         let edges_interval = self.edges_interval_from_handle(handle);
         let node_ref = self.noderef_from_handle(handle);
-        let incoming_edges_interval =
-            (edges_interval.start..edges_interval.start + node_ref.edges_to_node as usize);
-        let incoming_edges: &[Handle] = &self.edges[incoming_edges_interval];
+
+        let incoming_edges: Vec<Handle> = match handle.is_reverse() {
+            false => {
+                let incoming_edges_interval =
+                    (edges_interval.start..edges_interval.start + node_ref.edges_to_node as usize);
+                self.edges[incoming_edges_interval].to_vec()
+            }
+            true => self
+                .outgoing_edges_from_handle(&handle.flip())
+                .par_iter()
+                .map(|x| x.flip())
+                .rev()
+                .collect(),
+        };
         incoming_edges
     }
 
-    pub fn outgoing_edges_from_handle(&self, handle: &Handle) -> &[Handle] {
+    pub fn outgoing_edges_from_handle(&self, handle: &Handle) -> Vec<Handle> {
+        assert!(u64::from(handle.id()) <= self.n_nodes);
+
         let edges_interval = self.edges_interval_from_handle(handle);
         let node_ref = self.noderef_from_handle(handle);
-        let outgoing_edges_interval =
-            (edges_interval.start + node_ref.edges_to_node as usize..edges_interval.end);
-        let outgoing_edges: &[Handle] = &self.edges[outgoing_edges_interval];
+
+        let outgoing_edges: Vec<Handle> = match handle.is_reverse() {
+            false => {
+                let outgoing_edges_interval =
+                    (edges_interval.start + node_ref.edges_to_node as usize..edges_interval.end);
+                self.edges[outgoing_edges_interval].to_vec()
+            }
+            true => self
+                .incoming_edges_from_handle(&handle.flip())
+                .par_iter()
+                .map(|x| x.flip())
+                .rev()
+                .collect::<Vec<Handle>>()
+                .to_vec(),
+        };
+
         outgoing_edges
     }
 
@@ -535,6 +587,8 @@ mod test {
     use super::*;
 
     use bstr::ByteVec;
+    use gfa::gfa::GFA;
+    use gfa::parser::GFAParser;
     use itertools::Itertools;
     use substring::Substring;
 
@@ -968,62 +1022,32 @@ mod test {
     #[test]
     fn test_serialization() {
         let graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, 7.0, None);
+        let serialized_index = bincode::serialize(&index).unwrap();
+        let deserialized_index: Index = bincode::deserialize(&serialized_index).unwrap();
 
-        let seq_length = find_graph_seq_length(&graph);
+        assert_eq!(index.kmer_length, deserialized_index.kmer_length);
+        assert_eq!(index.seq_length, deserialized_index.seq_length);
+        assert_eq!(index.seq_fwd, deserialized_index.seq_fwd);
+        assert_eq!(index.seq_rev, deserialized_index.seq_rev);
+        assert_eq!(index.seq_bv, deserialized_index.seq_bv);
+        assert_eq!(index.n_edges, deserialized_index.n_edges);
+        assert_eq!(index.edges, deserialized_index.edges);
+        assert_eq!(index.n_nodes, deserialized_index.n_nodes);
+        assert_eq!(index.node_ref, deserialized_index.node_ref);
+        assert_eq!(index.n_kmers, deserialized_index.n_kmers);
+        assert_eq!(index.n_kmer_pos, deserialized_index.n_kmer_pos);
+        assert_eq!(index.kmer_pos_ref, deserialized_index.kmer_pos_ref);
+        assert_eq!(index.kmer_pos_table, deserialized_index.kmer_pos_table);
+        assert_eq!(index.loaded, deserialized_index.loaded);
 
-        // Generate the forward
-        let total_length = find_graph_seq_length(&graph);
-        let mut seq_bv: BitVec = BitVec::new_fill(false, total_length + 1);
-        let mut node_ref: Vec<NodeRef> = Vec::new();
-        let _forward =
-            find_forward_sequence(&graph, &mut seq_bv, &mut node_ref, &mut vec![], &mut 0);
-
-        // Check node_ref serialization
-        let encoded_node_ref = bincode::serialize(&node_ref).unwrap();
-        let deserialized_node_ref: Vec<NodeRef> = bincode::deserialize(&encoded_node_ref).unwrap();
-        assert_eq!(node_ref, deserialized_node_ref);
-
-        // Check bitvec serialization
-        let encoded_seq_bv = bincode::serialize(&seq_bv).unwrap();
-        let deserialized_seq_bv: BitVec = bincode::deserialize(&encoded_seq_bv).unwrap();
-        assert_eq!(seq_bv, deserialized_seq_bv);
-
-        let kmers_on_graph = generate_kmers(&graph, 3, Some(100), Some(100));
-
-        // Check kmer_graph serialization
-        let encoded_kmer_graph = bincode::serialize(&kmers_on_graph).unwrap();
-        let deserialized_kmer_graph: Vec<GraphKmer> =
-            bincode::deserialize(&encoded_kmer_graph).unwrap();
-        assert_eq!(kmers_on_graph, deserialized_kmer_graph);
-
-        let mut kmers_hashes: Vec<u64> = Vec::new();
-        let mut kmers_start_offsets: Vec<u64> = Vec::new();
-        let _kmers_positions_on_ref: Vec<KmerPos> = generate_pos_on_ref_2(
-            &graph,
-            &kmers_on_graph,
-            &seq_length,
-            &node_ref,
-            &mut kmers_hashes,
-            &mut kmers_start_offsets,
-        );
-
-        //println!("Kmers hashes : {:#?}", kmers_hashes);
-        //println!("Kmers start offsets : {:#?}", kmers_start_offsets);
-        assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
-
-        let table: NoKeyBoomHashMap<u64, u64> =
-            NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_start_offsets.clone());
-
-        //Check kmer_table serialization
-        let encoded_table = bincode::serialize(&table).unwrap();
-        let deserialized_table: NoKeyBoomHashMap<u64, u64> =
-            bincode::deserialize(&encoded_table).unwrap();
-
+        /*
         for hash in kmers_hashes {
             let table_value = table.get(&hash).unwrap();
             let deserialized_table_value = deserialized_table.get(&hash).unwrap();
             assert_eq!(table_value, deserialized_table_value);
         }
+         */
     }
 
     #[test]
@@ -1216,38 +1240,72 @@ mod test {
 
         assert_eq!(
             index.incoming_edges_from_handle(handles.get(0).unwrap()),
-            &vec![]
+            vec![]
         );
         assert_eq!(
             index.outgoing_edges_from_handle(handles.get(0).unwrap()),
-            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+            vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
         );
 
         assert_eq!(
             index.incoming_edges_from_handle(handles.get(1).unwrap()),
-            &vec![*handles.get(0).unwrap()]
+            vec![*handles.get(0).unwrap()]
         );
         assert_eq!(
             index.outgoing_edges_from_handle(handles.get(1).unwrap()),
-            &vec![*handles.get(3).unwrap()]
+            vec![*handles.get(3).unwrap()]
         );
 
         assert_eq!(
             index.incoming_edges_from_handle(handles.get(2).unwrap()),
-            &vec![*handles.get(0).unwrap()]
+            vec![*handles.get(0).unwrap()]
         );
         assert_eq!(
             index.outgoing_edges_from_handle(handles.get(2).unwrap()),
-            &vec![*handles.get(3).unwrap()]
+            vec![*handles.get(3).unwrap()]
         );
 
         assert_eq!(
             index.incoming_edges_from_handle(handles.get(3).unwrap()),
-            &vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
+            vec![*handles.get(1).unwrap(), *handles.get(2).unwrap()]
         );
         assert_eq!(
             index.outgoing_edges_from_handle(handles.get(3).unwrap()),
-            &vec![]
+            vec![]
+        );
+
+        // REVERSE
+        assert_eq!(
+            index.incoming_edges_from_handle(&handles.get(0).unwrap().flip()),
+            vec![
+                handles.get(2).unwrap().flip(),
+                handles.get(1).unwrap().flip()
+            ]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(&handles.get(0).unwrap().flip()),
+            vec![]
+        );
+
+        assert_eq!(
+            index.incoming_edges_from_handle(&handles.get(3).unwrap().flip()),
+            vec![]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(&handles.get(3).unwrap().flip()),
+            vec![
+                handles.get(2).unwrap().flip(),
+                handles.get(1).unwrap().flip()
+            ]
+        );
+
+        assert_eq!(
+            index.incoming_edges_from_handle(&handles.get(1).unwrap().flip()),
+            vec![handles.get(3).unwrap().flip()]
+        );
+        assert_eq!(
+            index.outgoing_edges_from_handle(&handles.get(1).unwrap().flip()),
+            vec![handles.get(0).unwrap().flip()]
         );
     }
 
@@ -1322,5 +1380,20 @@ mod test {
             index.handle_from_seqpos(&p2),
             handles.get(3).unwrap().flip()
         );
+    }
+
+    #[test]
+    fn outgoing_handle_14() {
+        use std::path::PathBuf;
+        let parser = GFAParser::new();
+        let gfa: GFA<usize, ()> = parser
+            .parse_file(&PathBuf::from("./test/test.gfa"))
+            .unwrap();
+        let graph = HashGraph::from_gfa(&gfa);
+
+        let index = Index::build(&graph, 11, 100, 100, 7.0, None);
+
+        let outgoing = index.outgoing_edges_from_handle(&Handle::from_integer(14));
+        println!("Outgoing: {:#?}", outgoing);
     }
 }

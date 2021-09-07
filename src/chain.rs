@@ -187,12 +187,7 @@ impl Chain {
             .min()
             .unwrap();
 
-        let max_query_pos: u64 = self
-            .anchors
-            .par_iter()
-            .map(|a| a.query_end)
-            .max()
-            .unwrap();
+        let max_query_pos: u64 = self.anchors.par_iter().map(|a| a.query_end).max().unwrap();
 
         (min_query_pos..max_query_pos)
     }

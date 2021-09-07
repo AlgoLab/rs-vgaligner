@@ -1,15 +1,28 @@
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fs::File;
 use std::io::{BufReader, Write};
 
 use handlegraph::handle::Handle;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-
 #[derive(Serialize, Deserialize)]
-#[serde(remote = "Handle")]
+//#[serde(remote = "Handle")]
 // Use this struct as a template for serializing the Handle, as Handle does not support Serde
 // natively (i.e. the annotation is missing)
 pub(crate) struct SerializableHandle(u64);
+
+pub fn handle_vec_ser<S: Serializer>(vec: &Vec<Handle>, serializer: S) -> Result<S::Ok, S::Error> {
+    let vec2: Vec<SerializableHandle> = vec
+        .iter()
+        .map(|h| SerializableHandle(h.as_integer()))
+        .collect();
+    vec2.serialize(serializer)
+}
+pub fn handle_vec_deser<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Handle>, D::Error> {
+    let vec: Vec<SerializableHandle> = Deserialize::deserialize(deserializer)?;
+    Ok(vec.iter().map(|sh| Handle::from_integer(sh.0)).collect())
+}
 
 /// Serialize an object of any kind (as long as it implements Serialize as required by Serde)
 /// and put the result of the serialization in a file
