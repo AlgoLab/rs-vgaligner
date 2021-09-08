@@ -10,6 +10,7 @@ use handlegraph::handle::Handle;
 // natively (i.e. the annotation is missing)
 pub(crate) struct SerializableHandle(u64);
 
+// Custom serializer for Index.edges (of type Vec<Handle> which does not implement Serialize)
 pub fn handle_vec_ser<S: Serializer>(vec: &Vec<Handle>, serializer: S) -> Result<S::Ok, S::Error> {
     let vec2: Vec<SerializableHandle> = vec
         .iter()
@@ -17,6 +18,7 @@ pub fn handle_vec_ser<S: Serializer>(vec: &Vec<Handle>, serializer: S) -> Result
         .collect();
     vec2.serialize(serializer)
 }
+// Custom deserializer for Index.edges (of type Vec<Handle> which does not implement Deserialize)
 pub fn handle_vec_deser<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<Handle>, D::Error> {

@@ -194,13 +194,6 @@ impl Index {
 
         assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
 
-        /*
-        println!("Kmer hashes length: {}", kmers_hashes.len());
-        println!("Kmer hashes: {:#?}", kmers_hashes);
-        let mut new_hashes : HashSet<u64> = HashSet::from_iter(kmers_hashes.iter().cloned());
-        assert_eq!(kmers_hashes.len(), new_hashes.len());
-         */
-
         // Generate a table which stores the kmers' starting offsets in a memory-efficient way,
         // as keys aren't actually stored (this is done by using a minimal perfect hash function,
         // which requires the keys to be known in advance). This however allows for false positives,
@@ -236,6 +229,7 @@ impl Index {
 
         // Store the index as multiple files
         if let Some(out_prefix) = out_prefix {
+            /*
             // Generate additional metadata, that will be used when rebuilding the index
             let meta = Metadata {
                 seq_length,
@@ -246,6 +240,7 @@ impl Index {
                 n_kmers: index.kmer_pos_ref.len() as u64,
                 n_kmer_positions: index.kmer_pos_table.len() as u64,
             };
+             */
 
             match index.store_with_prefix(out_prefix.to_string()) {
                 Err(e) => panic!("{}", e),
@@ -258,68 +253,11 @@ impl Index {
 
     /// Store the index in a location with prefix [out_prefix]
     fn store_with_prefix(&self, out_prefix: String) -> std::io::Result<()> {
-        /*
-        serialize_object_to_file(&self.seq_fwd, out_prefix.clone() + ".sqf")?;
-        serialize_object_to_file(&self.seq_rev, out_prefix.clone() + ".sqr")?;
-        serialize_object_to_file(&self.node_ref, out_prefix.clone() + ".gyn")?;
-        serialize_object_to_file(&self.seq_bv, out_prefix.clone() + ".sbv")?;
-        //serialize_object_to_file(&self.edges, out_prefix.clone() + ".edg")?;
-
-        //serialize_object_to_file(&kmers_on_graph, out_prefix.clone() + ".kgph").ok();
-
-        serialize_object_to_file(&self.kmer_pos_ref, out_prefix.clone() + ".kset")?;
-        serialize_object_to_file(&self.kmer_pos_table, out_prefix.clone() + ".kpos")?;
-
-        serialize_object_to_file(&self.bhpf, out_prefix.clone() + ".bbx")?;
-
-        serialize_object_to_file(&meta, out_prefix.clone() + ".mtd")?;
-         */
-
         serialize_object_to_file(&self, out_prefix.clone() + ".idx")?;
-
         Ok(())
     }
 
     pub fn load_from_prefix(out_prefix: String) -> Self {
-        /*
-        let seq_fwd: String = deserialize_object_from_file(out_prefix.clone() + ".sqf");
-        let seq_rev: String = deserialize_object_from_file(out_prefix.clone() + ".sqr");
-        let node_ref: Vec<NodeRef> = deserialize_object_from_file(out_prefix.clone() + ".gyn");
-        let seq_bv: BitVec = deserialize_object_from_file(out_prefix.clone() + ".sbv");
-        //let edges: Vec<Handle> = deserialize_object_from_file(out_prefix.clone() + ".edg");
-
-        //let kmers_on_graph: Vec<Kmer> =
-        //    deserialize_object_from_file(out_prefix.clone() + ".kgph");
-        let kmer_positions_on_ref: Vec<KmerPos> =
-            deserialize_object_from_file(out_prefix.clone() + ".kpos");
-        let kmers_hashes: Vec<u64> = deserialize_object_from_file(out_prefix.clone() + ".kset");
-
-        let kmers_table: NoKeyBoomHashMap<u64, u64> =
-            deserialize_object_from_file(out_prefix.clone() + ".bbx");
-
-        let meta: Metadata = deserialize_object_from_file(out_prefix.to_string() + ".mtd");
-
-        Index {
-            kmer_length: meta.kmer_length,
-            seq_length: meta.seq_length,
-            seq_fwd,
-            seq_rev,
-            seq_bv,
-            //seq_by_rank: Default::default(),
-            n_edges: meta.n_edges,
-            edges: Vec::new(),
-            n_nodes: meta.n_nodes,
-            node_ref,
-            n_kmers: meta.n_kmers,
-            n_kmer_pos: meta.n_kmer_positions,
-            kmer_pos_ref: kmers_hashes,
-            bhpf: kmers_table,
-            kmer_pos_table: kmer_positions_on_ref,
-            loaded: true,
-        }
-
-         */
-
         let index: Index = deserialize_object_from_file(out_prefix.to_string() + ".idx");
         index
     }
