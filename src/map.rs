@@ -7,10 +7,7 @@ use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
-use crate::align::{
-    obtain_base_level_alignment, obtain_base_level_alignment_handle,
-    obtain_base_level_alignment_handle2, GAFAlignment,
-};
+use crate::align::{obtain_base_level_alignment, GAFAlignment};
 use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
@@ -84,8 +81,8 @@ pub fn map_reads(
 
     if !dont_align {
         let alignments: Vec<GAFAlignment> = chains
-            .iter()
-            .map(|chain| obtain_base_level_alignment_handle2(index, chain))
+            .par_iter()
+            .map(|chain| obtain_base_level_alignment(index, chain))
             .collect();
 
         if alignments.is_empty() {
@@ -113,7 +110,10 @@ pub fn map_reads(
 
 /// Store [chains_gaf_strings] in the file with name [file_name]
 fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> std::io::Result<()> {
-    let gaf_strings: Vec<String> = gaf_alignments.iter().map(|aln| aln.to_string()).collect();
+    let gaf_strings: Vec<String> = gaf_alignments
+        .par_iter()
+        .map(|aln| aln.to_string())
+        .collect();
     let mut file =
         File::create(&file_name).unwrap_or_else(|_| panic!("Couldn't create file {}", &file_name));
     file.write_all(&gaf_strings.join("").as_bytes())

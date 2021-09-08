@@ -13,69 +13,7 @@ use rayon::prelude::*;
 use std::ops::Range;
 use substring::Substring;
 
-pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
-    // Find the range implied by the chain (on the graph!!!)
-    let po_range = find_range_single_chain(index, chain);
-
-    // Find nodes and edges
-    let (nodes, edges) = find_nodes_edges_2(&index, &po_range);
-
-    // TODO: possibly avoid this
-    let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
-    let edges_usize: Vec<(usize, usize)> = edges
-        .into_par_iter()
-        .map(|x| (x.0 as usize, x.1 as usize))
-        .collect();
-
-    // Find subquery implied by the chain
-    let subquery_range = chain.find_query_start_end();
-    let subquery = chain
-        .query
-        .seq
-        .to_string()
-        .substring(subquery_range.start as usize, subquery_range.end as usize)
-        .to_string();
-
-    // Align with abpoa
-    let mut result = AbpoaAlignmentResult::new();
-    println!(
-        "Nodes str: {:#?}, Edges: {:#?}, range: {:#?}",
-        nodes_str, edges_usize, po_range
-    );
-    /*
-    unsafe {
-        result = align_with_poa(&nodes_str, &edges_usize, subquery.as_str());
-    }
-     */
-    //let alignment: GAFAlignment = generate_alignment(chain, &result);
-    GAFAlignment {
-        query_name: "".to_string(),
-        query_length: 0,
-        query_start: 0,
-        query_end: 0,
-        strand: '+',
-        path_matching: "".to_string(),
-        path_length: 0,
-        path_start: 0,
-        path_end: 0,
-        residue: 0,
-        alignment_block_length: 0,
-        mapping_quality: 0,
-        notes: "".to_string(),
-    }
-}
-
-/// Find the leftmost starting node(handle) and rightmost node(handle) for each chain
 /*
-pub fn extract_graph_po_range(index: &Index, chains: &Vec<Chain>) -> Vec<Range<u64>> {
-    let start_end_vec: Vec<Range<u64>> = chains
-        .par_iter()
-        .map(|c| find_range_single_chain(index, c))
-        .collect();
-    start_end_vec
-}
- */
-
 fn find_range_single_chain(index: &Index, chain: &Chain) -> Range<u64> {
     let min_node = chain
         .anchors
@@ -91,53 +29,6 @@ fn find_range_single_chain(index: &Index, chain: &Chain) -> Range<u64> {
         .unwrap();
     min_node..max_node
 }
-/// Finds the nodes and edges involved in the alignment
-fn find_nodes_edges_2(index: &Index, po_range: &Range<u64>) -> (Vec<String>, Vec<(u64, u64)>) {
-    let seqs: Vec<String> = po_range
-        .clone()
-        .into_par_iter()
-        .map(|x| {
-            // TODO: replace with anchors, no info on orient
-            let handle_ref = index.node_ref.get((x - 1) as usize).unwrap();
-            let next_handle_ref = index.node_ref.get((x) as usize).unwrap();
-            index
-                .seq_fwd
-                .substring(
-                    handle_ref.seq_idx as usize,
-                    next_handle_ref.seq_idx as usize,
-                )
-                .to_string()
-        })
-        .collect();
-
-    // Generate edges
-    // TODO: check indices
-    let edges: Vec<(u64, u64)> = po_range
-        .clone()
-        .into_par_iter()
-        .flat_map(|node_id| {
-            //TODO: replace with anchors
-            let handle_ref = index.node_ref.get((node_id - 1) as usize).unwrap();
-            let next_handle_ref = index.node_ref.get((node_id) as usize).unwrap();
-
-            // TODO: these are ANCHORS!!! (in index.edges)
-            // Check outgoing edges
-            (handle_ref.edge_idx + handle_ref.edges_to_node..next_handle_ref.edge_idx)
-                .into_par_iter()
-                .map(move |to_node_id| {
-                    // Since in abpoa nodes start from 0, the edges have to be "normalized".
-                    // In practice this means subtracting from each each edge the start of the po_range,
-                    // e.g. po_range: [4,7), edges: [(4,5), (5,6), (6,7)] -> norm_edges [(0,1), (1,2), (2, 3)]
-                    (node_id, to_node_id)
-                })
-                //.filter(|edge| po_range.contains(&(edge.1*2)))
-                .map(|edge| (edge.0 - po_range.start, edge.1 - po_range.end))
-        })
-        .collect();
-
-    (seqs, edges)
-}
-/*
 pub fn extract_query_subsequence(
     index: &Index,
     chains: &Vec<Chain>,
@@ -151,61 +42,12 @@ pub fn extract_query_subsequence(
 }
  */
 
-// ----------- Handle ver ------------
-pub(crate) fn obtain_base_level_alignment_handle(index: &Index, chain: &Chain) -> GAFAlignment {
-    // Find the range implied by the chain (on the graph!!!)
-    // TODO: this may not be a range but a vec of handles because
-    // it should not always consider both strands of the handlegraph
-    let po_range = find_range_single_chain_anchor(index, chain);
-    println!("Po range is {:#?}", po_range);
-
-    // Find nodes and edges
-    let (nodes, edges) = find_nodes_edges_2_anchors(&index, &po_range);
-
-    // TODO: possibly avoid this
-    let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
-    let edges_usize: Vec<(usize, usize)> = edges
-        .into_par_iter()
-        .map(|x| (x.0 as usize, x.1 as usize))
-        .collect();
-
-    // Find subquery implied by the chain
-    let subquery_range = chain.find_query_start_end();
-    let subquery = chain
-        .query
-        .seq
-        .to_string()
-        .substring(subquery_range.start as usize, subquery_range.end as usize)
-        .to_string();
-    println!("Subquery is: {:#?}", subquery);
-
-    // Align with abpoa
-    let mut result = AbpoaAlignmentResult::new();
-    //println!("Nodes str: {:#?}, Edges: {:#?}, range: {:#?}", nodes_str, edges_usize, po_range);
-    //let alignment: GAFAlignment = generate_alignment(chain, &result);
-    GAFAlignment {
-        query_name: "".to_string(),
-        query_length: 0,
-        query_start: 0,
-        query_end: 0,
-        strand: '+',
-        path_matching: "".to_string(),
-        path_length: 0,
-        path_start: 0,
-        path_end: 0,
-        residue: 0,
-        alignment_block_length: 0,
-        mapping_quality: 0,
-        notes: "".to_string(),
-    }
-}
-
-pub(crate) fn obtain_base_level_alignment_handle2(index: &Index, chain: &Chain) -> GAFAlignment {
+pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
-    let po_range = find_range_single_chain_anchor_vec(index, chain);
+    let po_range = find_range_chain(index, chain);
 
     // Find nodes and edges
-    let (nodes, edges) = find_nodes_edges_2_anchors_vec(&index, &po_range);
+    let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
 
@@ -228,11 +70,13 @@ pub(crate) fn obtain_base_level_alignment_handle2(index: &Index, chain: &Chain) 
         result = align_with_poa(&nodes_str, &edges, subquery.as_str());
     }
     println!("Result is: {:#?}", result);
-    let alignment: GAFAlignment = generate_alignment(chain, &result, &po_range, &subquery_range, &subquery);
+    let alignment: GAFAlignment =
+        generate_alignment(chain, &result, &po_range, &subquery_range, &subquery);
 
     alignment
 }
 
+/*
 fn find_range_single_chain_anchor(index: &Index, chain: &Chain) -> Range<u64> {
     let min_handle = chain
         .anchors
@@ -248,8 +92,9 @@ fn find_range_single_chain_anchor(index: &Index, chain: &Chain) -> Range<u64> {
         .unwrap();
     u64::from(min_handle)..u64::from(max_handle)
 }
+ */
 
-fn find_range_single_chain_anchor_vec(index: &Index, chain: &Chain) -> Vec<Handle> {
+fn find_range_chain(index: &Index, chain: &Chain) -> Vec<Handle> {
     let min_handle: Handle = chain
         .anchors
         .par_iter()
@@ -299,6 +144,7 @@ fn find_range_single_chain_anchor_vec(index: &Index, chain: &Chain) -> Vec<Handl
     po_handle
 }
 
+/*
 /// Finds the nodes and edges involved in the alignment
 fn find_nodes_edges_2_anchors(
     index: &Index,
@@ -317,7 +163,7 @@ fn find_nodes_edges_2_anchors(
         .flat_map(|handle| {
             index
                 .outgoing_edges_from_handle(&Handle::from_integer(handle))
-                .iter()
+                .par_iter()
                 .map(|x| x.as_integer())
                 .filter(|target_handle| po_range.contains(target_handle))
                 .map(move |target_handle| (handle - po_range.start, target_handle - po_range.start))
@@ -327,15 +173,19 @@ fn find_nodes_edges_2_anchors(
 
     (seqs, edges)
 }
+ */
 
 /// Finds the nodes and edges involved in the alignment
-fn find_nodes_edges_2_anchors_vec(
+fn find_nodes_edges_for_abpoa(
     index: &Index,
     po_range: &Vec<Handle>,
 ) -> (Vec<String>, Vec<(usize, usize)>) {
     // Get the seqs for the handles in the po_range
     // This is necessary because in abpoa the nodes are specified by a Vec of sequences
-    let seqs: Vec<String> = po_range.iter().map(|h| index.seq_from_handle(h)).collect();
+    let seqs: Vec<String> = po_range
+        .par_iter()
+        .map(|h| index.seq_from_handle(h))
+        .collect();
 
     // Get the edges between the handles in the po_range
     // In abpoa the nodes are given as 0-based tuples (starting_node, ending_node).
@@ -355,10 +205,13 @@ fn find_nodes_edges_2_anchors_vec(
                 .filter(|target_handle| po_range.contains(target_handle))
                 // And find their 0-based position in the po range
                 .map(move |target_handle| {
-                    let starting_pos = po_range.iter().position(|x| *x == handle).unwrap();
-                    let ending_pos = po_range.iter().position(|x| *x == target_handle).unwrap();
+                    let starting_pos = po_range.par_iter().position(|x| *x == handle).unwrap();
+                    let ending_pos = po_range
+                        .par_iter()
+                        .position(|x| *x == target_handle)
+                        .unwrap();
                     (starting_pos, ending_pos)
-                }) //(handle.as_integer() - po_range.iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.iter().min().unwrap().as_integer()))
+                }) //(handle.as_integer() - po_range.par_iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.par_iter().min().unwrap().as_integer()))
                 .collect::<Vec<(usize, usize)>>()
         })
         .collect();
@@ -366,6 +219,7 @@ fn find_nodes_edges_2_anchors_vec(
     (seqs, edges)
 }
 
+/*
 /// Finds the nodes and edges involved in the alignment
 fn find_nodes_edges_2_anchors_vec_incoming(
     index: &Index,
@@ -373,7 +227,7 @@ fn find_nodes_edges_2_anchors_vec_incoming(
 ) -> (Vec<String>, Vec<(usize, usize)>) {
     // Get the seqs for the handles in the po_range
     // This is necessary because in abpoa the nodes are specified by a Vec of sequences
-    let seqs: Vec<String> = po_range.iter().map(|h| index.seq_from_handle(h)).collect();
+    let seqs: Vec<String> = po_range.par_iter().map(|h| index.seq_from_handle(h)).collect();
 
     // Get the edges between the handles in the po_range
     // In abpoa the nodes are given as 0-based tuples (starting_node, ending_node).
@@ -393,16 +247,17 @@ fn find_nodes_edges_2_anchors_vec_incoming(
                 .filter(|target_handle| po_range.contains(target_handle))
                 // And find their 0-based position in the po range
                 .map(move |target_handle| {
-                    let ending_pos = po_range.iter().position(|x| *x == handle).unwrap();
-                    let starting_pos = po_range.iter().position(|x| *x == target_handle).unwrap();
+                    let ending_pos = po_range.par_iter().position(|x| *x == handle).unwrap();
+                    let starting_pos = po_range.par_iter().position(|x| *x == target_handle).unwrap();
                     (starting_pos, ending_pos)
-                }) //(handle.as_integer() - po_range.iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.iter().min().unwrap().as_integer()))
+                }) //(handle.as_integer() - po_range.par_iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.par_iter().min().unwrap().as_integer()))
                 .collect::<Vec<(usize, usize)>>()
         })
         .collect();
 
     (seqs, edges)
 }
+ */
 
 /*
     GAF format
@@ -489,7 +344,7 @@ fn find_nodes_edges(graph: &HashGraph, po_range: &Range<u64>) -> (Vec<String>, V
         node_seqs.push(graph.sequence(*handle).into_string_lossy());
     }
     let mut edges: Vec<(u64, u64)> = node_handles
-        .iter()
+        .par_iter()
         .combinations(2)
         .filter_map(|h| {
             let left = **h.get(0).unwrap();
@@ -538,7 +393,6 @@ fn generate_alignment(
     subquery_range: &Range<u64>,
     subquery: &String,
 ) -> GAFAlignment {
-
     // Get the nodes involved in the alignment from abPOA
     let mut alignment_path = result.graph_nodes.clone();
     // Since abpoa deals with 1-base nodes, the abstraction simply converts
@@ -553,7 +407,10 @@ fn generate_alignment(
     // However, this graph is a subgraph of our original graph, so the ids must be shifted
     // accordingly.
     let po_range_first_node = po_range.get(0).unwrap().as_integer();
-    let normalized_alignment_path: Vec<u64> = alignment_path.iter().map(|x| *x as u64 + po_range_first_node).collect();
+    let normalized_alignment_path: Vec<u64> = alignment_path
+        .par_iter()
+        .map(|x| *x as u64 + po_range_first_node)
+        .collect();
 
     GAFAlignment {
         query_name: chain.query.name.clone(),
