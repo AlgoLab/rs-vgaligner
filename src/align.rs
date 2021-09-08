@@ -47,8 +47,22 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         result = align_with_poa(&nodes_str, &edges_usize, subquery.as_str());
     }
      */
-    let alignment: GAFAlignment = generate_alignment(chain, &result);
-    alignment
+    //let alignment: GAFAlignment = generate_alignment(chain, &result);
+    GAFAlignment {
+        query_name: "".to_string(),
+        query_length: 0,
+        query_start: 0,
+        query_end: 0,
+        strand: '+',
+        path_matching: "".to_string(),
+        path_length: 0,
+        path_start: 0,
+        path_end: 0,
+        residue: 0,
+        alignment_block_length: 0,
+        mapping_quality: 0,
+        notes: "".to_string(),
+    }
 }
 
 /// Find the leftmost starting node(handle) and rightmost node(handle) for each chain
@@ -168,8 +182,22 @@ pub(crate) fn obtain_base_level_alignment_handle(index: &Index, chain: &Chain) -
     // Align with abpoa
     let mut result = AbpoaAlignmentResult::new();
     //println!("Nodes str: {:#?}, Edges: {:#?}, range: {:#?}", nodes_str, edges_usize, po_range);
-    let alignment: GAFAlignment = generate_alignment(chain, &result);
-    alignment
+    //let alignment: GAFAlignment = generate_alignment(chain, &result);
+    GAFAlignment {
+        query_name: "".to_string(),
+        query_length: 0,
+        query_start: 0,
+        query_end: 0,
+        strand: '+',
+        path_matching: "".to_string(),
+        path_length: 0,
+        path_start: 0,
+        path_end: 0,
+        residue: 0,
+        alignment_block_length: 0,
+        mapping_quality: 0,
+        notes: "".to_string(),
+    }
 }
 
 pub(crate) fn obtain_base_level_alignment_handle2(index: &Index, chain: &Chain) -> GAFAlignment {
@@ -200,7 +228,7 @@ pub(crate) fn obtain_base_level_alignment_handle2(index: &Index, chain: &Chain) 
         result = align_with_poa(&nodes_str, &edges, subquery.as_str());
     }
     println!("Result is: {:#?}", result);
-    let alignment: GAFAlignment = generate_alignment(chain, &result);
+    let alignment: GAFAlignment = generate_alignment(chain, &result, &po_range, &subquery_range, &subquery);
 
     alignment
 }
@@ -503,21 +531,44 @@ unsafe fn align_with_poa(
 // The final alignment should be made up by:
 // - perfect matches (= anchors) where applicable
 // - poa result (cigar) otherwise
-fn generate_alignment(chain: &Chain, result: &AbpoaAlignmentResult) -> GAFAlignment {
+fn generate_alignment(
+    chain: &Chain,
+    result: &AbpoaAlignmentResult,
+    po_range: &Vec<Handle>,
+    subquery_range: &Range<u64>,
+    subquery: &String,
+) -> GAFAlignment {
+
+    // Get the nodes involved in the alignment from abPOA
+    let mut alignment_path = result.graph_nodes.clone();
+    // Since abpoa deals with 1-base nodes, the abstraction simply converts
+    // the abpoa_node_id to their position in the abstraction
+    // i.e suppose the abpoa_nodes are 2,3,4,5; the abstraction nodes are [2] and [3,4,5];
+    // result.graph_nodes will contain [0, 1, 1, 1], I want: [0,1]
+    // TODO: maybe this should be default in rs-abpoa?
+    alignment_path.dedup();
+
+    // Since alignment_path contains ids that are coherent with the nodes/edges
+    // used during its creation, the nodes will be something like [0, 1, ... po_range.max].
+    // However, this graph is a subgraph of our original graph, so the ids must be shifted
+    // accordingly.
+    let po_range_first_node = po_range.get(0).unwrap().as_integer();
+    let normalized_alignment_path: Vec<u64> = alignment_path.iter().map(|x| *x as u64 + po_range_first_node).collect();
+
     GAFAlignment {
-        query_name: "".to_string(),
-        query_length: 0,
-        query_start: 0,
-        query_end: 0,
+        query_name: chain.query.name.clone(),
+        query_length: subquery.len() as u64,
+        query_start: subquery_range.start,
+        query_end: subquery_range.end,
         strand: '+',
-        path_matching: "".to_string(),
-        path_length: 0,
-        path_start: 0,
-        path_end: 0,
+        path_matching: normalized_alignment_path.iter().join(","),
+        path_length: (result.node_e - result.node_s) as u64,
+        path_start: result.node_s as u64,
+        path_end: result.node_e as u64,
         residue: 0,
-        alignment_block_length: 0,
-        mapping_quality: 0,
-        notes: "".to_string(),
+        alignment_block_length: result.n_aligned_bases as u64,
+        mapping_quality: 255, //result.best_score as u64,
+        notes: ("cg:Z:".to_string() + result.cigar.clone().as_str()),
     }
 }
 

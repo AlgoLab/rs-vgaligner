@@ -33,4 +33,4 @@ serde_with = "1.8.1"
 bitvector = "0.1.5"
 
 # abpoa partial order aligner
-ab_poa = { git = "https://github.com/HopedWall/rs-abPOA" }
+ab_poa = { git = "https://github.com/HopedWall/rs-abpoa"}
