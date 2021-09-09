@@ -1,12 +1,7 @@
 name: rs-vgalign
-version: "0.2"
+version: "0.7"
 author: Francesco Porto <francesco.porto97@gmail.com>
 about: Aligns reads to a Variation Graph
-args:
-  - verbose:
-      short: v
-      multiple: true
-      help: Sets the level of verbosity
 subcommands:
   - index:
       about: creates the index
@@ -39,11 +34,11 @@ subcommands:
             help: Remove nodes that have degree greater that this level
             required: false
             takes_value: true
-        - sampling-rate:
-            short: r
-            long: sampling-rate
-            value_name: FLOAT
-            help: Build a modimizer index by keeping kmers whose hash % round(RATE/1) == 0
+        - max-degree:
+            short: m
+            long: max-degree
+            value_name: INTEGER
+            help: Maximum amount of edges to be traversed
             required: false
             takes_value: true
   - map:
@@ -60,23 +55,16 @@ subcommands:
                 short: f
                 long: input-file
                 value_name: FILE
-                help: Input file, either FASTA or FASTQ, optionally gzipped, multiple allowed
+                help: Input file, either FASTA or FASTQ
                 required: true
                 takes_value: true
             - out-prefix:
                   short: o
                   long: out
                   value_name: STRING
-                  help: Save the alignment with this prefix (defaults to input file name and path)
+                  help: Save the alignment with this prefix (defaults to index prefix)
                   required: false
                   takes_value: true
-            - query-seq:
-                short: s
-                long: query-seq
-                value_name: FILE
-                help: query one sequence
-                required: false
-                takes_value: true
             - max-gap-length:
                 short: g
                 long: max-gap-length
@@ -116,12 +104,6 @@ subcommands:
                 short: C
                 long: write-chains
                 help: write chains for each alignment
-                required: false
-                takes_value: false
-            - write-superchains:
-                short: S
-                long: write-superchains
-                help: write superchains for each alignment
                 required: false
                 takes_value: false
             - dont-align:

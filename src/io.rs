@@ -68,6 +68,7 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
         _ => panic!("Unrecognized file type"),
     }
 
+    /* <- this reads only 1 seqs out of 2 if the fasta file does not contain annotations
     // Then parse the file itself
     if file_type == InputFileTypes::Fasta {
         while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
@@ -81,6 +82,29 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
             seqs.push(QuerySequence { name, seq });
         }
     }
+     */
+
+    if file_type == InputFileTypes::Fasta {
+        while let Some(Ok(line)) = lines.next() {
+            if line.starts_with(">") {
+                let name: String = String::from(line.substring(1, line.len()));
+                if let Some(Ok(seq)) = lines.next() {
+                    seqs.push(QuerySequence { name, seq });
+                }
+            } else {
+                // Just to be extra safe...
+                if line != "" {
+                    seqs.push(QuerySequence {name: "".to_string(), seq: line})
+                }
+            }
+        }
+    } else if file_type == InputFileTypes::Fastq {
+        while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
+        (lines.next(), lines.next(), lines.next(), lines.next())
+        {
+            seqs.push(QuerySequence { name, seq });
+        }
+    }
 
     Ok(seqs)
 }
@@ -90,9 +114,32 @@ mod test {
     use crate::io::{read_seqs_from_file, QuerySequence};
 
     #[test]
-    fn test_read_fasta() {
+    fn test_read_fasta_single_read() {
         let test_seqs = read_seqs_from_file("./test/single-read-test.fa").unwrap();
         assert_eq!(test_seqs.len(), 1);
+        assert_eq!(test_seqs.get(0).unwrap().name, "seq0".to_string());
+        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+    }
+
+    #[test]
+    fn test_read_fasta_headers() {
+        let test_seqs = read_seqs_from_file("./test/multiple-read-test.fa").unwrap();
+        assert_eq!(test_seqs.len(), 2);
+        assert_eq!(test_seqs.get(0).unwrap().name, "seq0".to_string());
+        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+        assert_eq!(test_seqs.get(1).unwrap().name, "seq1".to_string());
+        assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
+    }
+
+    #[test]
+    fn test_read_fasta_no_header() {
+        let test_seqs = read_seqs_from_file("./test/test-no-headers.fa").unwrap();
+        assert_eq!(test_seqs.len(), 2);
+        assert_eq!(test_seqs.get(0).unwrap().name, "".to_string());
+        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+        assert_eq!(test_seqs.get(1).unwrap().name, "".to_string());
+        assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
+
     }
 
     #[test]

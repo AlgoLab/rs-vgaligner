@@ -6,11 +6,18 @@ use crate::io::read_seqs_from_file;
 pub fn map_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();
 
-    let idx_prefix = matches.value_of("input").unwrap();
+    let idx_prefix = matches
+        .value_of("input")
+        .unwrap();
 
-    let in_path_file = matches.value_of("input-file").unwrap();
+    let in_path_file = matches
+        .value_of("input-file")
+        .unwrap();
 
-    let out_prefix = matches.value_of("out-prefix");
+    let out_prefix = matches
+        .value_of("out-prefix")
+        // Keep the same path but remove ".gfa"
+        .unwrap_or(&idx_prefix);
 
     let max_gap_length = matches
         .value_of("max-gap-length")
@@ -22,12 +29,6 @@ pub fn map_main(global_matches : &ArgMatches) {
         .value_of("max-mismatch-rate")
         .unwrap_or(&"0.1")
         .parse::<f64>()
-        .unwrap();
-
-    let _chain_overlap_max = matches
-        .value_of("chain-overlap-max")
-        .unwrap_or(&"0.1")
-        .parse::<f32>()
         .unwrap();
 
     let chain_min_n_anchors = matches
@@ -46,9 +47,6 @@ pub fn map_main(global_matches : &ArgMatches) {
     let write_chains = matches
         .is_present("write-chains");
 
-    let _write_superchains = matches
-        .is_present("write-superchains");
-
     let dont_align = matches
         .is_present("dont-align");
 
@@ -59,5 +57,5 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query,50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains, out_prefix, dont_align);
+              write_chains, Some(out_prefix), dont_align);
 }
