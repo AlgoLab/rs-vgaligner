@@ -70,8 +70,13 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         result = align_with_poa(&nodes_str, &edges, subquery.as_str());
     }
     println!("Result is: {:#?}", result);
-    let alignment: GAFAlignment =
-        generate_alignment(chain, &result, &po_range, &subquery_range, &subquery);
+    let alignment: GAFAlignment = generate_alignment(
+        chain,
+        &result,
+        &po_range,
+        &subquery_range,
+        chain.query.seq.len(),
+    );
 
     alignment
 }
@@ -94,7 +99,26 @@ fn find_range_single_chain_anchor(index: &Index, chain: &Chain) -> Range<u64> {
 }
  */
 
-fn find_range_chain(index: &Index, chain: &Chain) -> Vec<Handle> {
+enum RangeOrient {
+    Forward,
+    Reverse,
+    Both,
+}
+
+struct OrientedGraphRange {
+    pub orient: RangeOrient,
+    pub handles: Vec<Handle>,
+}
+impl OrientedGraphRange {
+    pub fn get_first_handle(&self) -> &Handle {
+        self.handles.get(0).unwrap()
+    }
+    pub fn get_last_handle(&self) -> &Handle {
+        self.handles.last().unwrap()
+    }
+}
+
+fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     let min_handle: Handle = chain
         .anchors
         .par_iter()
@@ -108,8 +132,10 @@ fn find_range_chain(index: &Index, chain: &Chain) -> Vec<Handle> {
         .max()
         .unwrap();
 
-    let mut po_handle: Vec<Handle> = Vec::new();
+    let mut po_range_handles: Vec<Handle> = Vec::new();
+    let mut orient: RangeOrient = RangeOrient::Both;
 
+    /*
     println!(
         "Min handle: {:#?}, Max handle: {:#?}",
         min_handle, max_handle
@@ -119,29 +145,41 @@ fn find_range_chain(index: &Index, chain: &Chain) -> Vec<Handle> {
         "Range as nodes is: {:#?}",
         u64::from(min_handle)..u64::from(max_handle)
     );
+     */
 
     if !min_handle.is_reverse() && !max_handle.is_reverse() {
-        po_handle = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .filter(|x| x % 2 == 0)
             .map(|x| Handle::from_integer(x * 2))
             .collect();
+        orient = RangeOrient::Forward;
     } else if min_handle.is_reverse() && max_handle.is_reverse() {
-        po_handle = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .filter(|x| x % 2 != 0)
             .map(|x| Handle::from_integer(x * 2 + 1))
             .collect();
+        orient = RangeOrient::Reverse;
     } else {
-        po_handle = (u64::from(min_handle)..u64::from(max_handle))
+        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
-            //.filter(|x| x%2 != 0)
-            // TODO: fix this
             .map(|x| Handle::from_integer(x * 2))
             .collect();
+        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
+            .into_iter()
+            .map(|x| Handle::from_integer(x * 2 + 1))
+            .collect();
+        po_range_handles = [po_range_handles_fwd, po_range_handles_rev].concat();
+        po_range_handles.sort();
+
+        orient = RangeOrient::Both
     }
 
-    po_handle
+    OrientedGraphRange {
+        orient,
+        handles: po_range_handles,
+    }
 }
 
 /*
@@ -178,11 +216,13 @@ fn find_nodes_edges_2_anchors(
 /// Finds the nodes and edges involved in the alignment
 fn find_nodes_edges_for_abpoa(
     index: &Index,
-    po_range: &Vec<Handle>,
+    po_range: &OrientedGraphRange,
 ) -> (Vec<String>, Vec<(usize, usize)>) {
+    let range_handles = po_range.handles.clone();
+
     // Get the seqs for the handles in the po_range
     // This is necessary because in abpoa the nodes are specified by a Vec of sequences
-    let seqs: Vec<String> = po_range
+    let seqs: Vec<String> = range_handles
         .par_iter()
         .map(|h| index.seq_from_handle(h))
         .collect();
@@ -192,7 +232,7 @@ fn find_nodes_edges_for_abpoa(
     // For example in order to create this graph: "ACG" -> "AAA"
     // the following instuction will be used:
     // aligner.add_nodes_edges(&vec!["ACG", "AAA"], &vec![(0, 1)]);
-    let edges: Vec<(usize, usize)> = po_range
+    let edges: Vec<(usize, usize)> = range_handles
         .clone()
         .into_iter()
         // For each handle in the po range
@@ -202,11 +242,11 @@ fn find_nodes_edges_for_abpoa(
                 .outgoing_edges_from_handle(&handle)
                 .into_iter()
                 // Only keep the ones in the po range
-                .filter(|target_handle| po_range.contains(target_handle))
+                .filter(|target_handle| range_handles.contains(target_handle))
                 // And find their 0-based position in the po range
-                .map(move |target_handle| {
-                    let starting_pos = po_range.par_iter().position(|x| *x == handle).unwrap();
-                    let ending_pos = po_range
+                .map(|target_handle| {
+                    let starting_pos = range_handles.par_iter().position(|x| *x == handle).unwrap();
+                    let ending_pos = range_handles
                         .par_iter()
                         .position(|x| *x == target_handle)
                         .unwrap();
@@ -389,9 +429,9 @@ unsafe fn align_with_poa(
 fn generate_alignment(
     chain: &Chain,
     result: &AbpoaAlignmentResult,
-    po_range: &Vec<Handle>,
+    po_range: &OrientedGraphRange,
     subquery_range: &Range<u64>,
-    subquery: &String,
+    og_query_length: usize,
 ) -> GAFAlignment {
     // Get the nodes involved in the alignment from abPOA
     let mut alignment_path = result.graph_nodes.clone();
@@ -399,33 +439,46 @@ fn generate_alignment(
     // the abpoa_node_id to their position in the abstraction
     // i.e suppose the abpoa_nodes are 2,3,4,5; the abstraction nodes are [2] and [3,4,5];
     // result.graph_nodes will contain [0, 1, 1, 1], I want: [0,1]
-    // TODO: maybe this should be default in rs-abpoa?
     alignment_path.dedup();
 
     // Since alignment_path contains ids that are coherent with the nodes/edges
     // used during its creation, the nodes will be something like [0, 1, ... po_range.max].
     // However, this graph is a subgraph of our original graph, so the ids must be shifted
     // accordingly.
-    let po_range_first_node = po_range.get(0).unwrap().as_integer();
-    let normalized_alignment_path: Vec<u64> = alignment_path
+    let og_graph_alignment_path: Vec<Handle> = alignment_path
         .par_iter()
-        .map(|x| *x as u64 + po_range_first_node)
+        .map(|x| *po_range.handles.get(*x).unwrap())
         .collect();
+
+    let alignment_path_string: Vec<String> = og_graph_alignment_path
+        .par_iter()
+        .map(|handle| match handle.is_reverse() {
+            false => ">".to_string() + handle.as_integer().to_string().as_str(),
+            true => "<".to_string() + handle.as_integer().to_string().as_str(),
+        })
+        .collect();
+
+    // Find path start and end
+    let og_path_start = og_graph_alignment_path.first().unwrap().as_integer();
+    let og_path_end = og_graph_alignment_path.last().unwrap().as_integer();
 
     GAFAlignment {
         query_name: chain.query.name.clone(),
-        query_length: subquery.len() as u64,
+        query_length: og_query_length as u64,
         query_start: subquery_range.start,
         query_end: subquery_range.end,
         strand: '+',
-        path_matching: normalized_alignment_path.iter().join(","),
-        path_length: (result.node_e - result.node_s) as u64,
-        path_start: result.node_s as u64,
-        path_end: result.node_e as u64,
+        path_matching: alignment_path_string.iter().join(""),
+        path_length: og_path_end - og_path_start,
+        path_start: og_path_start,
+        path_end: og_path_end,
         residue: 0,
         alignment_block_length: result.n_aligned_bases as u64,
         mapping_quality: 255, //result.best_score as u64,
-        notes: ("cg:Z:".to_string() + result.cigar.clone().as_str()),
+        notes: ("cg:Z:".to_string()
+            + result.cigar.clone().as_str()
+            + ":as:i:"
+            + result.best_score.to_string().as_str()),
     }
 }
 
