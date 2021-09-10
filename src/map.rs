@@ -24,7 +24,14 @@ pub fn map_reads(
     write_chains: bool,
     out_prefix: Option<&str>,
     dont_align: bool,
+    n_threads: usize,
 ) {
+    // Create threadpool with the number of threads specified by the user
+    match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
+        Ok(_) => println!("Mapping reads to Index using {} threads", rayon::current_num_threads()),
+        Err(_) => println!("Threadpool already initialized!")
+    };
+
     // TODO: use start_id to disambiguate anchors in different for iterations?
     // i.e. the anchor 23 appeared multiple times in chains, that was because
     // in each for iteration I use as anchor_ids (0..seq_anchors.len()), therefore
@@ -139,11 +146,11 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None);
+        let index = Index::build(&graph, 11, 100, 100, None, 0);
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true,
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true, 0,
         );
     }
 }

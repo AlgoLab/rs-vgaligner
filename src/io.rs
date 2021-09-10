@@ -86,6 +86,7 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
 
     if file_type == InputFileTypes::Fasta {
         while let Some(Ok(line)) = lines.next() {
+            // TODO: keep or not? idk
             if line.starts_with(">") {
                 let name: String = String::from(line.substring(1, line.len()));
                 if let Some(Ok(seq)) = lines.next() {
@@ -94,13 +95,16 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
             } else {
                 // Just to be extra safe...
                 if line != "" {
-                    seqs.push(QuerySequence {name: "".to_string(), seq: line})
+                    seqs.push(QuerySequence {
+                        name: "".to_string(),
+                        seq: line,
+                    })
                 }
             }
         }
     } else if file_type == InputFileTypes::Fastq {
         while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
-        (lines.next(), lines.next(), lines.next(), lines.next())
+            (lines.next(), lines.next(), lines.next(), lines.next())
         {
             seqs.push(QuerySequence { name, seq });
         }
@@ -118,7 +122,10 @@ mod test {
         let test_seqs = read_seqs_from_file("./test/single-read-test.fa").unwrap();
         assert_eq!(test_seqs.len(), 1);
         assert_eq!(test_seqs.get(0).unwrap().name, "seq0".to_string());
-        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+        assert_eq!(
+            test_seqs.get(0).unwrap().seq,
+            "AAAAACGTTAAATTTGGCATCGTAGCAAAAA"
+        );
     }
 
     #[test]
@@ -126,7 +133,10 @@ mod test {
         let test_seqs = read_seqs_from_file("./test/multiple-read-test.fa").unwrap();
         assert_eq!(test_seqs.len(), 2);
         assert_eq!(test_seqs.get(0).unwrap().name, "seq0".to_string());
-        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+        assert_eq!(
+            test_seqs.get(0).unwrap().seq,
+            "AAAAACGTTAAATTTGGCATCGTAGCAAAAA"
+        );
         assert_eq!(test_seqs.get(1).unwrap().name, "seq1".to_string());
         assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
     }
@@ -136,10 +146,12 @@ mod test {
         let test_seqs = read_seqs_from_file("./test/test-no-headers.fa").unwrap();
         assert_eq!(test_seqs.len(), 2);
         assert_eq!(test_seqs.get(0).unwrap().name, "".to_string());
-        assert_eq!(test_seqs.get(0).unwrap().seq, "AAAAACGTTAAATTTGGCATCGTAGCAAAAA");
+        assert_eq!(
+            test_seqs.get(0).unwrap().seq,
+            "AAAAACGTTAAATTTGGCATCGTAGCAAAAA"
+        );
         assert_eq!(test_seqs.get(1).unwrap().name, "".to_string());
         assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
-
     }
 
     #[test]

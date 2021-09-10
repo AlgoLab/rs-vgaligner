@@ -31,14 +31,21 @@ subcommands:
             short: e
             long: max-furcations
             value_name: INTEGER
-            help: Remove nodes that have degree greater that this level
+            help: Remove nodes that have degree greater that this level (defaults to 100)
             required: false
             takes_value: true
         - max-degree:
             short: m
             long: max-degree
             value_name: INTEGER
-            help: Maximum amount of edges to be traversed
+            help: Maximum amount of edges to be traversed (defauts to 100)
+            required: false
+            takes_value: true
+        - n-threads:
+            short: n
+            long: threads
+            value_name: INTEGER
+            help: Number of threads to be used (defaults to all available)
             required: false
             takes_value: true
   - map:
@@ -69,32 +76,32 @@ subcommands:
                 short: g
                 long: max-gap-length
                 value_name: INTEGER
-                help: maximum gap length in chaining (default 1000)
+                help: maximum gap length in chaining (defaults to 1000)
                 required: false
                 takes_value: true
             - max-mismatch-rate:
                 short: r
                 long: max-mismatch-rate
                 value_name: FLOAT
-                help: maximum allowed mismatch rate (default 0.1)
+                help: maximum allowed mismatch rate (defaults to 0.1)
                 required: false
                 takes_value: true
             - chain-overlap-max:
                 short: c
                 long: chain-overlap-max
                 value_name: FLOAT
-                help: maximum allowed mismatch rate (default 0.1)
+                help: maximum allowed mismatch rate (defaults to 0.1)
                 required: false
                 takes_value: true
             - chain-min-anchors:
                 short: a
                 long: chain-min-anchors
                 value_name: INTEGER
-                help: minimum number of anchors in a chain (default 3)
+                help: minimum number of anchors in a chain (defaults to 3)
                 required: false
                 takes_value: true
             - align-best-n:
-                short: n
+                short: b
                 long: align-best-n
                 value_name: INTEGER
                 help: align the best N superchains
@@ -112,6 +119,13 @@ subcommands:
                 help: don't align, just chain
                 required: false
                 takes_value: false
+            - n-threads:
+                short: n
+                long: threads
+                value_name: INTEGER
+                help: Number of threads to be used (defaults to all available)
+                required: false
+                takes_value: true
 
 
 

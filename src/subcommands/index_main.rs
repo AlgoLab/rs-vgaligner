@@ -34,6 +34,12 @@ pub fn index_main(global_matches : &ArgMatches) {
         .parse::<u64>()
         .unwrap();
 
+    let n_threads = matches
+        .value_of("n-threads")
+        .unwrap_or(&"0")    // Use all available threads
+        .parse::<usize>()
+        .unwrap();
+
     // Create HashGraph from GFA
     let parser = GFAParser::new();
     let gfa: GFA<usize, ()> = parser
@@ -48,5 +54,6 @@ pub fn index_main(global_matches : &ArgMatches) {
         max_furcations,
         max_degree,
         Some(out_prefix),
+        n_threads,
     );
 }

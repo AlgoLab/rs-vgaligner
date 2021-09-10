@@ -50,12 +50,20 @@ pub fn map_main(global_matches : &ArgMatches) {
     let dont_align = matches
         .is_present("dont-align");
 
+    let n_threads = matches
+        .value_of("n-threads")
+        .unwrap_or(&"0")    // Use all available threads
+        .parse::<usize>()
+        .unwrap();
+
     let index = Index::load_from_prefix(idx_prefix.to_string());
 
     let query = read_seqs_from_file(&in_path_file).unwrap();
 
-    map_reads(&index, &query,50, max_gap_length,
+    map_reads(&index, &query, 50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains, Some(out_prefix), dont_align);
+              write_chains, Some(out_prefix), dont_align,
+              n_threads
+    );
 }
