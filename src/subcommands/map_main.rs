@@ -56,6 +56,12 @@ pub fn map_main(global_matches : &ArgMatches) {
         .parse::<usize>()
         .unwrap();
 
+    // Create threadpool with the number of threads specified by the user
+    match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
+        Ok(_) => println!("Mapping reads to Index using {} threads", rayon::current_num_threads()),
+        Err(e) => panic!("{}",e)
+    };
+
     let index = Index::load_from_prefix(idx_prefix.to_string());
 
     let query = read_seqs_from_file(&in_path_file).unwrap();
@@ -63,7 +69,6 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query, 50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains, Some(out_prefix), dont_align,
-              n_threads
+              write_chains, Some(out_prefix), dont_align
     );
 }

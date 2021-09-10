@@ -104,7 +104,7 @@ subcommands:
                 short: b
                 long: align-best-n
                 value_name: INTEGER
-                help: align the best N superchains
+                help: align the best N superchains (defaults to all chains)
                 required: false
                 takes_value: true
             - write-chains:
