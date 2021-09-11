@@ -7,7 +7,7 @@ pub fn map_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();
 
     let idx_prefix = matches
-        .value_of("input")
+        .value_of("index")
         .unwrap();
 
     let in_path_file = matches
@@ -44,11 +44,11 @@ pub fn map_main(global_matches : &ArgMatches) {
         .parse::<u64>()
         .unwrap();
 
-    let write_chains = matches
-        .is_present("write-chains");
+    let write_console = matches
+        .is_present("write-console");
 
-    let dont_align = matches
-        .is_present("dont-align");
+    let also_align = matches
+        .is_present("also-align");
 
     let n_threads = matches
         .value_of("n-threads")
@@ -58,7 +58,7 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     // Create threadpool with the number of threads specified by the user
     match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
-        Ok(_) => println!("Mapping reads to Index using {} threads", rayon::current_num_threads()),
+        Ok(_) => println!("Mapping reads to Index using {} threads!", rayon::current_num_threads()),
         Err(e) => panic!("{}",e)
     };
 
@@ -69,6 +69,6 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query, 50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_chains, Some(out_prefix), dont_align
+              write_console, Some(out_prefix), also_align
     );
 }

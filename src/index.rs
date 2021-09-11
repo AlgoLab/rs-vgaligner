@@ -224,13 +224,17 @@ impl Index {
             loaded: false,
         };
 
-        println!("Index built correctly!");
+        println!("Index with k={} built correctly!", index.kmer_length);
+        println!(
+            "Found {} different kmers, which appear in {} positions!",
+            index.n_kmers, index.n_kmer_pos
+        );
 
         // Store the index as multiple files
         if let Some(out_prefix) = out_prefix {
             match index.store_with_prefix(out_prefix.to_string()) {
                 Err(e) => panic!("{}", e),
-                _ => println!("Index stored correctly!"),
+                _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
             }
         }
 
@@ -244,7 +248,7 @@ impl Index {
     }
 
     pub fn load_from_prefix(out_prefix: String) -> Self {
-        let index: Index = deserialize_object_from_file(out_prefix.to_string() + ".idx");
+        let index: Index = deserialize_object_from_file(out_prefix.to_string());
         index
     }
 

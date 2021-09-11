@@ -51,13 +51,13 @@ subcommands:
   - map:
         about: map sequences to a graph
         args:
-            - input:
-                  short: i
-                  long: index
-                  value_name: FILE
-                  help: Load the index from this prefix
-                  required: true
-                  takes_value: true
+            - index:
+                short: i
+                long: index
+                value_name: FILE
+                help: Load the Index from this file
+                required: true
+                takes_value: true
             - input-file:
                 short: f
                 long: input-file
@@ -66,12 +66,12 @@ subcommands:
                 required: true
                 takes_value: true
             - out-prefix:
-                  short: o
-                  long: out
-                  value_name: STRING
-                  help: Save the alignment with this prefix (defaults to index prefix)
-                  required: false
-                  takes_value: true
+                short: o
+                long: out
+                value_name: STRING
+                help: Save the alignment with this prefix (defaults to index prefix)
+                required: false
+                takes_value: true
             - max-gap-length:
                 short: g
                 long: max-gap-length
@@ -107,16 +107,16 @@ subcommands:
                 help: align the best N superchains (defaults to all chains)
                 required: false
                 takes_value: true
-            - write-chains:
+            - write-console:
                 short: C
-                long: write-chains
-                help: write chains for each alignment
+                long: write-console
+                help: write chains (and alignments if --also-align is set) to console
                 required: false
                 takes_value: false
-            - dont-align:
+            - also-align:
                 short: D
-                long: dont-align
-                help: don't align, just chain
+                long: also-align
+                help: also align after chaining
                 required: false
                 takes_value: false
             - n-threads:

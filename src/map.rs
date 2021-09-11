@@ -21,16 +21,11 @@ pub fn map_reads(
     secondary_chain_threshold: f64,
     max_mismatch_rate: f64,
     max_mapq: f64,
-    write_chains: bool,
+    write_console: bool,
     out_prefix: Option<&str>,
-    dont_align: bool,
+    also_align: bool,
 ) {
-    // TODO: use start_id to disambiguate anchors in different for iterations?
-    // i.e. the anchor 23 appeared multiple times in chains, that was because
-    // in each for iteration I use as anchor_ids (0..seq_anchors.len()), therefore
-    // the id is only relative to that specific seq_anchors
-    //let mut start_id : anchor_id = 0;
-
+    // Collect chains obtained from each input sequence
     let chains: Vec<Chain> = inputs
         .into_par_iter()
         .flat_map(|query| {
@@ -55,31 +50,36 @@ pub fn map_reads(
         })
         .collect();
 
-    if write_chains {
-        if chains.is_empty() {
-            println!("No chain found!");
-        } else {
-            let chains_gaf: Vec<GAFAlignment> = chains
-                .par_iter()
-                .map(|c| GAFAlignment::from_chain(c))
-                .collect();
-            match out_prefix {
-                Some(prefix) => {
-                    match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
-                        Err(e) => panic!("{}", e),
-                        _ => println!("Chains stored correctly!"),
-                    }
-                }
-                _ => {
-                    for gaf_str in chains_gaf {
-                        println!("{:#?}", gaf_str);
-                    }
-                }
+    // Store chains as GAF Strings, and store them to a output GAF file,
+    // and optionally to console
+    if chains.is_empty() {
+        println!("No chain found!");
+    } else {
+        let chains_gaf: Vec<GAFAlignment> = chains
+            .par_iter()
+            .map(|c| GAFAlignment::from_chain(c))
+            .collect();
+
+        if let Some(prefix) = out_prefix {
+            match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
+                Err(e) => panic!("{}", e),
+                _ => println!(
+                    "Chains stored correctly in {}.gaf!",
+                    prefix.clone().to_string()
+                ),
+            }
+        }
+
+        if write_console {
+            println!("Found {} chains!", chains.len());
+            for gaf_str in chains_gaf {
+                println!("{:#?}", gaf_str);
             }
         }
     }
 
-    if !dont_align {
+    // Perform the alignment with rs-abPOA, using the chains as a reference
+    if also_align {
         let alignments: Vec<GAFAlignment> = chains
             .par_iter()
             .map(|chain| obtain_base_level_alignment(index, chain))
@@ -88,20 +88,23 @@ pub fn map_reads(
         if alignments.is_empty() {
             println!("No alignment found!");
         } else {
-            match out_prefix {
-                Some(prefix) => {
-                    match write_gaf_to_file(
-                        &alignments,
-                        prefix.clone().to_string() + "-aligned" + ".gaf",
-                    ) {
-                        Err(e) => panic!("{}", e),
-                        _ => println!("Alignments stored correctly!"),
-                    }
+            if let Some(prefix) = out_prefix {
+                match write_gaf_to_file(
+                    &alignments,
+                    prefix.clone().to_string() + "-aligned" + ".gaf",
+                ) {
+                    Err(e) => panic!("{}", e),
+                    _ => println!(
+                        "Alignments stored correctly in {}-aligned.gaf!",
+                        prefix.clone().to_string()
+                    ),
                 }
-                _ => {
-                    for gaf_str in alignments {
-                        println!("{:#?}", gaf_str);
-                    }
+            }
+
+            if write_console {
+                println!("Found {} alignments!", alignments.len());
+                for gaf_str in alignments {
+                    println!("{:#?}", gaf_str);
                 }
             }
         }
