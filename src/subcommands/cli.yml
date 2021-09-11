@@ -69,7 +69,7 @@ subcommands:
                 short: o
                 long: out
                 value_name: STRING
-                help: Save the alignment with this prefix (defaults to index prefix)
+                help: Save the alignment with this prefix (defaults to input file name and path)
                 required: false
                 takes_value: true
             - max-gap-length:

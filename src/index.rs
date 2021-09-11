@@ -247,7 +247,7 @@ impl Index {
         Ok(())
     }
 
-    pub fn load_from_prefix(out_prefix: String) -> Self {
+    pub fn load_from_file(out_prefix: String) -> Self {
         let index: Index = deserialize_object_from_file(out_prefix.to_string());
         index
     }

@@ -61,10 +61,10 @@ pub fn map_reads(
             .collect();
 
         if let Some(prefix) = out_prefix {
-            match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + ".gaf") {
+            match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + "-chains" + ".gaf") {
                 Err(e) => panic!("{}", e),
                 _ => println!(
-                    "Chains stored correctly in {}.gaf!",
+                    "Chains stored correctly in {}-chains.gaf!",
                     prefix.clone().to_string()
                 ),
             }
@@ -91,11 +91,11 @@ pub fn map_reads(
             if let Some(prefix) = out_prefix {
                 match write_gaf_to_file(
                     &alignments,
-                    prefix.clone().to_string() + "-aligned" + ".gaf",
+                    prefix.clone().to_string() + "-alignments" + ".gaf",
                 ) {
                     Err(e) => panic!("{}", e),
                     _ => println!(
-                        "Alignments stored correctly in {}-aligned.gaf!",
+                        "Alignments stored correctly in {}-alignments.gaf!",
                         prefix.clone().to_string()
                     ),
                 }

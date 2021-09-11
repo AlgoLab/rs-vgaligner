@@ -16,8 +16,13 @@ pub fn map_main(global_matches : &ArgMatches) {
 
     let out_prefix = matches
         .value_of("out-prefix")
-        // Keep the same path but remove ".gfa"
-        .unwrap_or(&idx_prefix);
+        // Keep the same path but remove ".fa/fasta/fq/fastq"
+        .unwrap_or_else(||
+            if in_path_file.ends_with("fa") || in_path_file.ends_with("fasta") {
+                &in_path_file[0..in_path_file.len()-3]
+            } else {
+                &in_path_file[0..in_path_file.len()-4]
+            });
 
     let max_gap_length = matches
         .value_of("max-gap-length")
@@ -62,7 +67,7 @@ pub fn map_main(global_matches : &ArgMatches) {
         Err(e) => panic!("{}",e)
     };
 
-    let index = Index::load_from_prefix(idx_prefix.to_string());
+    let index = Index::load_from_file(idx_prefix.to_string());
 
     let query = read_seqs_from_file(&in_path_file).unwrap();
 

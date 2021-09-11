@@ -51,8 +51,13 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
 
-    //println!("Seqs: {:?}", nodes_str);
-    //println!("Edges: {:?}", edges);
+    /*
+    println!("Query seq: {:#?}", chain.query.seq);
+    println!("Seqs: {:?}", nodes_str);
+    println!("Edges: {:?}", edges);
+    println!("Chain: {:#?}", chain);
+    println!("po_range: {:#?}", po_range);
+     */
 
     // Find subquery implied by the chain
     let subquery_range = chain.find_query_start_end();
@@ -99,12 +104,13 @@ fn find_range_single_chain_anchor(index: &Index, chain: &Chain) -> Range<u64> {
 }
  */
 
+#[derive(Debug)]
 enum RangeOrient {
     Forward,
     Reverse,
     Both,
 }
-
+#[derive(Debug)]
 struct OrientedGraphRange {
     pub orient: RangeOrient,
     pub handles: Vec<Handle>,
@@ -119,18 +125,27 @@ impl OrientedGraphRange {
 }
 
 fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
-    let min_handle: Handle = chain
+    let mut min_handle: Handle = chain
         .anchors
         .par_iter()
         .map(|a| index.handle_from_seqpos(&a.target_begin))
         .min()
         .unwrap();
-    let max_handle: Handle = chain
+    let mut max_handle: Handle = chain
         .anchors
         .par_iter()
         .map(|a| index.handle_from_seqpos(&a.target_end))
         .max()
         .unwrap();
+
+    // If on reverse strand the range min and max will be reversed
+    if min_handle > max_handle {
+        assert!(min_handle.is_reverse());
+        assert!(max_handle.is_reverse());
+        let temp = min_handle;
+        min_handle = max_handle;
+        max_handle = temp;
+    }
 
     let mut po_range_handles: Vec<Handle> = Vec::new();
     let mut orient: RangeOrient = RangeOrient::Both;
@@ -140,35 +155,41 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         "Min handle: {:#?}, Max handle: {:#?}",
         min_handle, max_handle
     );
-    println!("Range as handle is: {:#?}", min_handle..max_handle);
+     */
+    //println!("Range as handle is: {:#?}", min_handle..max_handle);
+    /*
     println!(
         "Range as nodes is: {:#?}",
         u64::from(min_handle)..u64::from(max_handle)
     );
-     */
+    println!("Noderef {:#?}", index.noderef_from_handle(&min_handle));
+    println!("Handle: {:#?}, u64: {:#?}, Handle from u64: {:#?}", min_handle, u64::from(min_handle), Handle::from_integer(u64::from(min_handle)));
+    */
 
     if !min_handle.is_reverse() && !max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
-            .filter(|x| x % 2 == 0)
             .map(|x| Handle::from_integer(x * 2))
+            .filter(|x| !x.is_reverse())
             .collect();
         orient = RangeOrient::Forward;
     } else if min_handle.is_reverse() && max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
-            .filter(|x| x % 2 != 0)
             .map(|x| Handle::from_integer(x * 2 + 1))
+            .filter(|x| x.is_reverse())
             .collect();
         orient = RangeOrient::Reverse;
     } else {
-        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
+        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2))
+            .filter(|x| !x.is_reverse())
             .collect();
-        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
+        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2 + 1))
+            .filter(|x| x.is_reverse())
             .collect();
         po_range_handles = [po_range_handles_fwd, po_range_handles_rev].concat();
         po_range_handles.sort();
@@ -422,10 +443,7 @@ unsafe fn align_with_poa(
     let res = aligner.align_sequence(query);
     res
 }
-// TODO: complete this
-// The final alignment should be made up by:
-// - perfect matches (= anchors) where applicable
-// - poa result (cigar) otherwise
+
 fn generate_alignment(
     chain: &Chain,
     result: &AbpoaAlignmentResult,
@@ -435,6 +453,8 @@ fn generate_alignment(
 ) -> GAFAlignment {
     // Get the nodes involved in the alignment from abPOA
     let mut alignment_path = result.graph_nodes.clone();
+    //println!("Alignment path is: {:#?}\n", alignment_path);
+
     // Since abpoa deals with 1-base nodes, the abstraction simply converts
     // the abpoa_node_id to their position in the abstraction
     // i.e suppose the abpoa_nodes are 2,3,4,5; the abstraction nodes are [2] and [3,4,5];
