@@ -55,6 +55,8 @@ pub fn map_reads(
     if chains.is_empty() {
         println!("No chain found!");
     } else {
+        println!("Found {} chains!", chains.len());
+
         let chains_gaf: Vec<GAFAlignment> = chains
             .par_iter()
             .map(|c| GAFAlignment::from_chain(c))
@@ -71,7 +73,6 @@ pub fn map_reads(
         }
 
         if write_console {
-            println!("Found {} chains!", chains.len());
             for gaf_str in chains_gaf {
                 println!("{:#?}", gaf_str);
             }
@@ -88,6 +89,7 @@ pub fn map_reads(
         if alignments.is_empty() {
             println!("No alignment found!");
         } else {
+            println!("Found {} alignments!", alignments.len());
             if let Some(prefix) = out_prefix {
                 match write_gaf_to_file(
                     &alignments,
@@ -102,7 +104,6 @@ pub fn map_reads(
             }
 
             if write_console {
-                println!("Found {} alignments!", alignments.len());
                 for gaf_str in alignments {
                     println!("{:#?}", gaf_str);
                 }

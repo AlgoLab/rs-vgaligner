@@ -322,6 +322,7 @@ pub fn chain_anchors(
                 let mut pred_id = a.best_predecessor_id;
                 a.best_predecessor_id = None;
 
+                // Add query to chain
                 let mut curr_chain = Chain::new();
                 curr_chain.query = query.clone();
 

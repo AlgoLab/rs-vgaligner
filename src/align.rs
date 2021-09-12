@@ -374,23 +374,29 @@ fn generate_alignment(
         .collect();
 
     // Find path start and end
-    let og_path_start = og_graph_alignment_path.first().unwrap().as_integer();
-    let og_path_end = og_graph_alignment_path.last().unwrap().as_integer();
+    /*
+    let og_path_start_handle = og_graph_alignment_path.first().unwrap();
+    let og_path_end_handle = og_graph_alignment_path.last().unwrap();
+    let og_path_start = 0 +
+            result.graph_nodes.iter().filter(|x| (**x as u64) == og_path_start_handle.as_integer()).count() as u64;
+    let og_path_end =
+            result.graph_nodes.iter().filter(|x| (**x as u64) == og_path_end_handle.as_integer()).count() as u64;
+    */
 
     GAFAlignment {
         query_name: chain.query.name.clone(),
-        query_length: og_query_length as u64,
+        query_length: subquery_range.end - subquery_range.start,
         query_start: subquery_range.start,
         query_end: subquery_range.end,
         strand: '+',
         path_matching: alignment_path_string.iter().join(""),
-        path_length: og_path_end - og_path_start,
-        path_start: og_path_start,
-        path_end: og_path_end,
+        path_length: result.abpoa_nodes.len() as u64,
+        path_start: 0,                                 //og_path_start,
+        path_end: result.abpoa_nodes.len() as u64 - 1, //og_path_end,
         residue: 0,
         alignment_block_length: result.n_aligned_bases as u64,
         mapping_quality: 255, //result.best_score as u64,
-        notes: (":as:i:-30".to_string()),
+        notes: ("as:i:-30".to_string() + " " + "cg:Z:" + result.cigar.as_str()),
     }
 }
 
