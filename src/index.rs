@@ -329,6 +329,7 @@ impl Index {
     // Get in which node a certain position is
     pub fn node_id_from_seqpos(&self, pos: &SeqPos) -> u64 {
         let rank = self.get_bv_rank(pos.position as usize) as u64;
+        //assert!(rank < self.node_ref.len() as u64 - 1);
 
         let result = match pos.orient {
             SeqOrient::Forward => rank,
@@ -397,6 +398,9 @@ impl Index {
     pub fn seq_from_handle(&self, handle: &Handle) -> String {
         let curr_node_ref = self.noderef_from_handle(handle);
         let curr_handle_pos = self.noderef_pos_from_handle(handle);
+
+        // Last node is a marker
+        assert!(curr_handle_pos < self.node_ref.len() - 1);
 
         let next_node_ref = self.node_ref.get(curr_handle_pos + 1).unwrap();
         let ref_seq: String = match handle.is_reverse() {

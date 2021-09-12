@@ -13,35 +13,6 @@ use rayon::prelude::*;
 use std::ops::Range;
 use substring::Substring;
 
-/*
-fn find_range_single_chain(index: &Index, chain: &Chain) -> Range<u64> {
-    let min_node = chain
-        .anchors
-        .par_iter()
-        .map(|a| index.node_id_from_seqpos(&a.target_begin))
-        .min()
-        .unwrap();
-    let max_node = chain
-        .anchors
-        .par_iter()
-        .map(|a| index.node_id_from_seqpos(&a.target_end))
-        .max()
-        .unwrap();
-    min_node..max_node
-}
-pub fn extract_query_subsequence(
-    index: &Index,
-    chains: &Vec<Chain>,
-    _query: &QuerySequence,
-) -> Vec<String> {
-    let subseqs: Vec<String> = chains
-        .par_iter()
-        .map(|c| index.seq_from_start_end_seqpos(&c.target_begin, &c.target_end))
-        .collect();
-    subseqs
-}
- */
-
 pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
     let po_range = find_range_chain(index, chain);
@@ -51,13 +22,11 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
 
-    /*
-    println!("Query seq: {:#?}", chain.query.seq);
-    println!("Seqs: {:?}", nodes_str);
-    println!("Edges: {:?}", edges);
-    println!("Chain: {:#?}", chain);
-    println!("po_range: {:#?}", po_range);
-     */
+    //println!("Query seq: {:#?}", chain.query.seq);
+    //println!("Seqs: {:?}", nodes_str);
+    //println!("Edges: {:?}", edges);
+    //println!("Chain: {:#?}", chain);
+    //println!("po_range: {:#?}", po_range);
 
     // Find subquery implied by the chain
     let subquery_range = chain.find_query_start_end();
@@ -85,24 +54,6 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
 
     alignment
 }
-
-/*
-fn find_range_single_chain_anchor(index: &Index, chain: &Chain) -> Range<u64> {
-    let min_handle = chain
-        .anchors
-        .par_iter()
-        .map(|a| index.handle_from_seqpos(&a.target_begin))
-        .min()
-        .unwrap();
-    let max_handle = chain
-        .anchors
-        .par_iter()
-        .map(|a| index.handle_from_seqpos(&a.target_end))
-        .max()
-        .unwrap();
-    u64::from(min_handle)..u64::from(max_handle)
-}
- */
 
 #[derive(Debug)]
 enum RangeOrient {
@@ -140,6 +91,7 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
 
     // If on reverse strand the range min and max will be reversed
     if min_handle > max_handle {
+        // But this should never happen in other cases...
         assert!(min_handle.is_reverse());
         assert!(max_handle.is_reverse());
         let temp = min_handle;
@@ -167,34 +119,43 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     */
 
     if !min_handle.is_reverse() && !max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2))
             .filter(|x| !x.is_reverse())
             .collect();
         orient = RangeOrient::Forward;
     } else if min_handle.is_reverse() && max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2 + 1))
             .filter(|x| x.is_reverse())
             .collect();
         orient = RangeOrient::Reverse;
     } else {
-        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
+        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2))
             .filter(|x| !x.is_reverse())
             .collect();
-        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
+        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2 + 1))
             .filter(|x| x.is_reverse())
             .collect();
         po_range_handles = [po_range_handles_fwd, po_range_handles_rev].concat();
-        po_range_handles.sort();
+        po_range_handles.par_sort();
 
         orient = RangeOrient::Both
+    }
+
+    // If min_handle == max_handle (i.e. the chain is on a single Handle), due to how
+    // ranges work in Rust, it would return an empty range. This if tries to fix that.
+    // I previously tried to set the range as inclusive to the right (i.e. ..= ) but
+    // it would lead to index.noderef to go out of bounds. (This is probably due to
+    // upper bounds being non-inclusive throughout the program).
+    if po_range_handles.is_empty() && min_handle == max_handle {
+        po_range_handles.push(min_handle);
     }
 
     OrientedGraphRange {
@@ -203,43 +164,13 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     }
 }
 
-/*
-/// Finds the nodes and edges involved in the alignment
-fn find_nodes_edges_2_anchors(
-    index: &Index,
-    po_range: &Range<u64>,
-) -> (Vec<String>, Vec<(u64, u64)>) {
-    let seqs: Vec<String> = po_range
-        .clone()
-        .into_iter()
-        .map(|h| index.seq_from_handle(&Handle::from_integer(h)))
-        .collect();
-    println!("Seqs: {:#?}", seqs);
-
-    let edges: Vec<(u64, u64)> = po_range
-        .clone()
-        .into_iter()
-        .flat_map(|handle| {
-            index
-                .outgoing_edges_from_handle(&Handle::from_integer(handle))
-                .par_iter()
-                .map(|x| x.as_integer())
-                .filter(|target_handle| po_range.contains(target_handle))
-                .map(move |target_handle| (handle - po_range.start, target_handle - po_range.start))
-                .collect::<Vec<(u64, u64)>>()
-        })
-        .collect();
-
-    (seqs, edges)
-}
- */
-
 /// Finds the nodes and edges involved in the alignment
 fn find_nodes_edges_for_abpoa(
     index: &Index,
     po_range: &OrientedGraphRange,
 ) -> (Vec<String>, Vec<(usize, usize)>) {
     let range_handles = po_range.handles.clone();
+    //println!("Range handles is: {:#?}", range_handles);
 
     // Get the seqs for the handles in the po_range
     // This is necessary because in abpoa the nodes are specified by a Vec of sequences
@@ -281,46 +212,6 @@ fn find_nodes_edges_for_abpoa(
 }
 
 /*
-/// Finds the nodes and edges involved in the alignment
-fn find_nodes_edges_2_anchors_vec_incoming(
-    index: &Index,
-    po_range: &Vec<Handle>,
-) -> (Vec<String>, Vec<(usize, usize)>) {
-    // Get the seqs for the handles in the po_range
-    // This is necessary because in abpoa the nodes are specified by a Vec of sequences
-    let seqs: Vec<String> = po_range.par_iter().map(|h| index.seq_from_handle(h)).collect();
-
-    // Get the edges between the handles in the po_range
-    // In abpoa the nodes are given as 0-based tuples (starting_node, ending_node).
-    // For example in order to create this graph: "ACG" -> "AAA"
-    // the following instuction will be used:
-    // aligner.add_nodes_edges(&vec!["ACG", "AAA"], &vec![(0, 1)]);
-    let edges: Vec<(usize, usize)> = po_range
-        .clone()
-        .into_iter()
-        // For each handle in the po range
-        .flat_map(|handle| {
-            index
-                // Find all the outgoing edges (this actually returns the handles the edges point to)
-                .incoming_edges_from_handle(&handle)
-                .into_iter()
-                // Only keep the ones in the po range
-                .filter(|target_handle| po_range.contains(target_handle))
-                // And find their 0-based position in the po range
-                .map(move |target_handle| {
-                    let ending_pos = po_range.par_iter().position(|x| *x == handle).unwrap();
-                    let starting_pos = po_range.par_iter().position(|x| *x == target_handle).unwrap();
-                    (starting_pos, ending_pos)
-                }) //(handle.as_integer() - po_range.par_iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.par_iter().min().unwrap().as_integer()))
-                .collect::<Vec<(usize, usize)>>()
-        })
-        .collect();
-
-    (seqs, edges)
-}
- */
-
-/*
     GAF format
     https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf
     Col     Type    Description
@@ -336,6 +227,8 @@ fn find_nodes_edges_2_anchors_vec_incoming(
     10      int     Number of residue matches
     11      int     Alignment block length
     12      int     Mapping quality (0-255; 255 for missing)
+
+    NOTE: There can also be additional notes at the end.
 */
 #[derive(Debug)]
 pub(crate) struct GAFAlignment {
@@ -469,12 +362,14 @@ fn generate_alignment(
         .par_iter()
         .map(|x| *po_range.handles.get(*x).unwrap())
         .collect();
+    //println!("Og graph aligment path: {:#?}", og_graph_alignment_path);
+    //println!("Og graph nodes: {:#?}", og_graph_alignment_path.par_iter().map(|x| u64::from(x.id())).collect::<Vec<u64>>());
 
     let alignment_path_string: Vec<String> = og_graph_alignment_path
         .par_iter()
         .map(|handle| match handle.is_reverse() {
-            false => ">".to_string() + handle.as_integer().to_string().as_str(),
-            true => "<".to_string() + handle.as_integer().to_string().as_str(),
+            false => ">".to_string() + u64::from(handle.id()).to_string().as_str(),
+            true => "<".to_string() + u64::from(handle.id()).to_string().as_str(),
         })
         .collect();
 
@@ -495,10 +390,7 @@ fn generate_alignment(
         residue: 0,
         alignment_block_length: result.n_aligned_bases as u64,
         mapping_quality: 255, //result.best_score as u64,
-        notes: ("cg:Z:".to_string()
-            + result.cigar.clone().as_str()
-            + ":as:i:"
-            + result.best_score.to_string().as_str()),
+        notes: (":as:i:-30".to_string()),
     }
 }
 
@@ -509,6 +401,9 @@ mod test {
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
     use handlegraph::hashgraph::HashGraph;
+
+    #[test]
+    fn test_find_node_edges() {}
 
     /*
     fn graph_from_file() -> HashGraph {
