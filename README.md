@@ -18,19 +18,36 @@ There are three main steps in this program:
 This crate is mostly inteded to be used as an executable, 
 but you can also use its functions if you may want to do so.
 
+In order to install vgaligner as an executable, clone this repository, move to its main folder
+and run:
+
+```
+cargo install --path .
+```
+
 ### Index
 
 Generate the index with the following command:
 
 ```
-cargo run --release -- index -k {kmer-size} -i {path-to-gfa-file} -o {output-folder}
+vgaligner index -k {kmer-size} -i {input.gfa} -o {index.idx}
 ```
 
-The index is composed of multiple files, so you might want to add a prefix
-after the output folder (i.e. ```-o ./output/my-prefix```). 
-
 There are also additional parameters to limit the number of nodes/edges to be traversed, you can use 
-```cargo run -- index --help``` to see them all.
+```vgaligner index --help``` to see them all.
 
 ### Mapping and Alignment
-TODO
+
+Map reads to the graph with the following command:
+
+```
+vgaligner map -i {index.idx} -f {reads.fa/fq} -o {output.gaf}
+```
+
+This will output the chains in GAF format. 
+
+If you also want to perform 
+the alignment with abPOA, you will need to pass the ```--also-align``` parameter. 
+This will generate an additional GAF file which contains the alignment.
+
+You can see all of the available parameters with ```vgaligner map --help```.
