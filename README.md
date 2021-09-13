@@ -4,10 +4,10 @@ Aligns reads to a Variation Graph by exploiting **Chaining** and **Partial Order
 ## How it works
 There are three main steps in this program:
 
-1. **Indexing** - We first build an index over the input graph, which contains all of the kmers (of a given size k) encoded by it, and
+1. **Indexing** - We first build an index over the input graph, which contains all of the k-mers (of a given size k) encoded by it, and
    their positions w.r.t. the linearized forward/reverse sequence. These positions are stored in a memory-efficient way by 
    using a [Minimal Perfect Hash Function](https://github.com/10XGenomics/rust-boomphf).
-2. **Mapping** - We then split the query into kmers, and find perfect maches between these kmers and the index ("**anchors**"). 
+2. **Mapping** - We then split the query into k-mers, and find perfect maches between these kmers and the index ("**anchors**"). 
    Anchors that are close together are grouped into approximate alignments ("**chains**"), with the constraint that an anchor 
    can appear in at most one chain.
 3. **Alignment** - In order to convert chains into **base-level alignments**, we align the subgraph implied by the chain

@@ -7,7 +7,7 @@ use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
-use crate::align::{obtain_base_level_alignment, GAFAlignment};
+use crate::align::{best_alignment_for_query, obtain_base_level_alignment, GAFAlignment};
 use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
@@ -26,9 +26,9 @@ pub fn map_reads(
     also_align: bool,
 ) {
     // Collect chains obtained from each input sequence
-    let chains: Vec<Chain> = inputs
+    let chains: Vec<Vec<Chain>> = inputs
         .into_par_iter()
-        .flat_map(|query| {
+        .filter_map(|query| {
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
             let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
@@ -46,7 +46,11 @@ pub fn map_reads(
                 query,
             );
 
-            seq_chains
+            if !seq_chains.is_empty() {
+                Some(seq_chains)
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -55,11 +59,14 @@ pub fn map_reads(
     if chains.is_empty() {
         println!("No chain found!");
     } else {
-        println!("Found {} chains!", chains.len());
+        println!(
+            "Found {} chains!",
+            chains.par_iter().map(|x| x.len()).sum::<usize>()
+        );
 
         let chains_gaf: Vec<GAFAlignment> = chains
             .par_iter()
-            .map(|c| GAFAlignment::from_chain(c))
+            .flat_map(|query_chains| query_chains.par_iter().map(|c| GAFAlignment::from_chain(c)))
             .collect();
 
         if let Some(prefix) = out_prefix {
@@ -83,7 +90,7 @@ pub fn map_reads(
     if also_align {
         let alignments: Vec<GAFAlignment> = chains
             .par_iter()
-            .map(|chain| obtain_base_level_alignment(index, chain))
+            .map(|query_chains| best_alignment_for_query(index, query_chains))
             .collect();
 
         if alignments.is_empty() {
@@ -136,7 +143,23 @@ mod test {
     use std::path::PathBuf;
 
     #[test]
-    fn test_map() {
+    fn test_map_no_alignment() {
+        let parser = GFAParser::new();
+        let gfa: GFA<usize, ()> = parser
+            .parse_file(&PathBuf::from("./test/test.gfa"))
+            .unwrap();
+        let graph = HashGraph::from_gfa(&gfa);
+
+        let index = Index::build(&graph, 11, 100, 100, None);
+        let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
+
+        map_reads(
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false,
+        );
+    }
+
+    #[test]
+    fn test_map_with_alignment() {
         let parser = GFAParser::new();
         let gfa: GFA<usize, ()> = parser
             .parse_file(&PathBuf::from("./test/test.gfa"))

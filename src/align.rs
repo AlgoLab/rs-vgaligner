@@ -13,6 +13,15 @@ use rayon::prelude::*;
 use std::ops::Range;
 use substring::Substring;
 
+pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
+    let mut alignments: Vec<GAFAlignment> = query_chains
+        .par_iter()
+        .map(|chain| obtain_base_level_alignment(index, chain))
+        .collect();
+    alignments.sort_by(|a, b| a.mapping_quality.cmp(&b.mapping_quality));
+    alignments.first().cloned().unwrap()
+}
+
 pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
     let po_range = find_range_chain(index, chain);
@@ -230,8 +239,8 @@ fn find_nodes_edges_for_abpoa(
 
     NOTE: There can also be additional notes at the end.
 */
-#[derive(Debug)]
-pub(crate) struct GAFAlignment {
+#[derive(Debug, Clone)]
+pub struct GAFAlignment {
     query_name: String,
     query_length: u64,
     query_start: u64,
