@@ -25,6 +25,8 @@ pub fn map_reads(
     out_prefix: Option<&str>,
     also_align: bool,
 ) {
+    println!("Found {} reads!", inputs.len());
+
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
         .into_par_iter()

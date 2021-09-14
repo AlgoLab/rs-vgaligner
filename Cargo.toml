@@ -34,3 +34,4 @@ bitvector = "0.1.5"
 
 # abpoa partial order aligner
 ab_poa = { git = "https://github.com/HopedWall/rs-abpoa"}
+#ab_poa = { path = "../rs-abPOA"}

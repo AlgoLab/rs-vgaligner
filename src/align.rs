@@ -32,12 +32,13 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
 
     //println!("Query seq: {:#?}", chain.query.seq);
-    //println!("Seqs: {:?}", nodes_str);
-    //println!("Edges: {:?}", edges);
+    //println!("Seqs: {:?}, len {}, nested-len {}", nodes_str, nodes_str.len(), nodes_str.par_iter().map(|x| x.len()).sum::<usize>());
+    //println!("Edges: {:?}, len {}", edges, edges.len());
     //println!("Chain: {:#?}", chain);
     //println!("po_range: {:#?}", po_range);
 
     // Find subquery implied by the chain
+    /*
     let subquery_range = chain.find_query_start_end();
     let subquery = chain
         .query
@@ -45,19 +46,20 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         .to_string()
         .substring(subquery_range.start as usize, subquery_range.end as usize)
         .to_string();
+     */
     //println!("Subquery is: {:#?}", subquery);
 
     // Align with abpoa
     let mut result = AbpoaAlignmentResult::new();
     unsafe {
-        result = align_with_poa(&nodes_str, &edges, subquery.as_str());
+        result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
     }
     //println!("Result is: {:#?}", result);
     let alignment: GAFAlignment = generate_alignment(
         chain,
         &result,
         &po_range,
-        &subquery_range,
+        &(0 as u64..chain.query.seq.len() as u64), //&subquery_range,
         chain.query.seq.len(),
     );
 
