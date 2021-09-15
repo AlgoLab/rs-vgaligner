@@ -66,6 +66,13 @@ impl Anchor {
             best_predecessor_id: None,
         }
     }
+
+    pub fn get_end_seqpos_inclusive(&self) -> SeqPos {
+        let mut end_seqpos = self.target_end.clone();
+        // Remove 1 because rhs non-inclusive, we want the actual end position
+        end_seqpos.position -= 1;
+        end_seqpos
+    }
 }
 
 /// Obtain all the anchors between the [index] and the [query] sequence
@@ -275,6 +282,7 @@ pub fn chain_anchors(
 
     // First sort the anchors by their ending position
     anchors.par_sort_by(|a, b| a.target_end.position.cmp(&b.target_end.position));
+    //println!("Query: {}, Anchors: {:#?}", query.seq, anchors);
 
     // Then, compute the maximal chaining score up to the current anchor.
     // This score is called f(i) in the paper.

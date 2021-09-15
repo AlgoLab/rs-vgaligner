@@ -19,7 +19,6 @@ pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAF
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
     alignments.sort_by(|a, b| a.path_length.cmp(&b.path_length));
-    println!("Alignments are: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
 
@@ -98,9 +97,15 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     let mut max_handle: Handle = chain
         .anchors
         .par_iter()
-        .map(|a| index.handle_from_seqpos(&a.target_end))
+        // Here a method is called (instead of simply getting the attribute)
+        // because the end position is stored as non-inclusive, but I want the
+        // last included position
+        .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .max()
         .unwrap();
+
+    //println!("Min handle: {:#?}", min_handle);
+    //println!("Max handle: {:#?}", max_handle);
 
     // If on reverse strand the range min and max will be reversed
     if min_handle > max_handle {
@@ -132,26 +137,26 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     */
 
     if !min_handle.is_reverse() && !max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2))
             .filter(|x| !x.is_reverse())
             .collect();
         orient = RangeOrient::Forward;
     } else if min_handle.is_reverse() && max_handle.is_reverse() {
-        po_range_handles = (u64::from(min_handle)..u64::from(max_handle))
+        po_range_handles = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2 + 1))
             .filter(|x| x.is_reverse())
             .collect();
         orient = RangeOrient::Reverse;
     } else {
-        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
+        let po_range_handles_fwd: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2))
             .filter(|x| !x.is_reverse())
             .collect();
-        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..u64::from(max_handle))
+        let po_range_handles_rev: Vec<Handle> = (u64::from(min_handle)..=u64::from(max_handle))
             .into_iter()
             .map(|x| Handle::from_integer(x * 2 + 1))
             .filter(|x| x.is_reverse())

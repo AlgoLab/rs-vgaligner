@@ -400,7 +400,12 @@ impl Index {
         let curr_handle_pos = self.noderef_pos_from_handle(handle);
 
         // Last node is a marker
-        assert!(curr_handle_pos < self.node_ref.len() - 1);
+        assert!(
+            curr_handle_pos < self.node_ref.len() - 1,
+            "Handle is: {:#?}, nodeid: {}",
+            handle,
+            handle.id()
+        );
 
         let next_node_ref = self.node_ref.get(curr_handle_pos + 1).unwrap();
         let ref_seq: String = match handle.is_reverse() {
