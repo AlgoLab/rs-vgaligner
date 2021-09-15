@@ -18,7 +18,8 @@ pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAF
         .par_iter()
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
-    alignments.sort_by(|a, b| a.mapping_quality.cmp(&b.mapping_quality));
+    alignments.sort_by(|a, b| a.path_length.cmp(&b.path_length));
+    println!("Alignments are: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
 
@@ -52,14 +53,15 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     // Align with abpoa
     let mut result = AbpoaAlignmentResult::new();
     unsafe {
+        //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
         result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
     }
-    //println!("Result is: {:#?}", result);
     let alignment: GAFAlignment = generate_alignment(
         chain,
         &result,
         &po_range,
-        &(0 as u64..chain.query.seq.len() as u64), //&subquery_range,
+        //&subquery_range,
+        &(0 as u64..chain.query.seq.len() as u64),
         chain.query.seq.len(),
     );
 
@@ -406,8 +408,8 @@ fn generate_alignment(
         path_end: result.abpoa_nodes.len() as u64 - 1, //og_path_end,
         residue: 0,
         alignment_block_length: result.n_aligned_bases as u64,
-        mapping_quality: 255, //result.best_score as u64,
-        notes: ("as:i:-30".to_string() + " " + "cg:Z:" + result.cigar.as_str()),
+        mapping_quality: 255,            //result.best_score as u64,
+        notes: ("as:i:-30".to_string()), //+ " " + "cg:Z:" + result.cigar.as_str()),
     }
 }
 

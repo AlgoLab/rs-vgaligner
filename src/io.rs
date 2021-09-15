@@ -68,7 +68,6 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
         _ => panic!("Unrecognized file type"),
     }
 
-    /* <- this reads only 1 seqs out of 2 if the fasta file does not contain annotations
     // Then parse the file itself
     if file_type == InputFileTypes::Fasta {
         while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
@@ -82,8 +81,8 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
             seqs.push(QuerySequence { name, seq });
         }
     }
-     */
 
+    /* <- this also reads fasta without headers, can be ignored
     if file_type == InputFileTypes::Fasta {
         while let Some(Ok(line)) = lines.next() {
             // TODO: keep or not? idk
@@ -109,6 +108,7 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
             seqs.push(QuerySequence { name, seq });
         }
     }
+     */
 
     Ok(seqs)
 }
@@ -141,6 +141,7 @@ mod test {
         assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
     }
 
+    /*
     #[test]
     fn test_read_fasta_no_header() {
         let test_seqs = read_seqs_from_file("./test/test-no-headers.fa").unwrap();
@@ -153,6 +154,7 @@ mod test {
         assert_eq!(test_seqs.get(1).unwrap().name, "".to_string());
         assert_eq!(test_seqs.get(1).unwrap().seq, "TTTCGTTAAATTTGGCATCGTAGCTTT");
     }
+     */
 
     #[test]
     fn test_read_fastq() {
