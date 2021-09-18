@@ -67,13 +67,13 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
 }
 
 #[derive(Debug)]
-enum RangeOrient {
+pub enum RangeOrient {
     Forward,
     Reverse,
     Both,
 }
 #[derive(Debug)]
-struct OrientedGraphRange {
+pub struct OrientedGraphRange {
     pub orient: RangeOrient,
     pub handles: Vec<Handle>,
 }
@@ -86,7 +86,8 @@ impl OrientedGraphRange {
     }
 }
 
-fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
+pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
+    /* -- old version: this did not work correctly for reverse handles
     let mut min_handle: Handle = chain
         .anchors
         .par_iter()
@@ -102,10 +103,33 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .max()
         .unwrap();
+     */
+
+    let start_handles: Vec<Handle> = chain
+        .anchors
+        .par_iter()
+        .map(|a| index.handle_from_seqpos(&a.target_begin))
+        .collect();
+    let end_handles: Vec<Handle> = chain
+        .anchors
+        .par_iter()
+        // Here a method is called (instead of simply getting the attribute)
+        // because the end position is stored as non-inclusive, but I want the
+        // last included position
+        .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
+        .collect();
+
+    let all_handles: Vec<Handle> = start_handles
+        .into_par_iter()
+        .chain(end_handles.into_par_iter())
+        .collect();
+    let mut min_handle: Handle = *all_handles.par_iter().min().unwrap();
+    let mut max_handle: Handle = *all_handles.par_iter().max().unwrap();
 
     //println!("Min id: {}, handle: {:#?}", min_handle.id(), min_handle);
     //println!("Max id: {}, handle: {:#?}", max_handle.id(), max_handle);
 
+    /*
     // If on reverse strand the range min and max could be reversed
     if min_handle > max_handle {
         // But this should never happen in other cases...
@@ -115,6 +139,7 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         min_handle = max_handle;
         max_handle = temp;
     }
+     */
 
     let mut po_range_handles: Vec<Handle>;
     let orient: RangeOrient;

@@ -474,10 +474,13 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
 
+    use crate::align::find_range_chain;
     use crate::chain::{anchors_for_query, chain_anchors, Chain};
     use crate::index::Index;
     use crate::io::QuerySequence;
     use crate::kmer::SeqOrient;
+    use ab_poa::abpoa::abpoa_align_sequence_to_subgraph;
+    use handlegraph::handle::Handle;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
@@ -527,6 +530,71 @@ mod test {
         assert_eq!(anchor.target_begin.orient, SeqOrient::Forward);
         assert_eq!(anchor.target_end.position, 3);
         assert_eq!(anchor.target_end.orient, SeqOrient::Forward);
+    }
+
+    #[test]
+    fn test_simple_anchors_reverse() {
+        let mut graph = HashGraph::new();
+        let h1 = graph.create_handle("AAA".as_bytes(), 1);
+        let h2 = graph.create_handle("CCC".as_bytes(), 2);
+        let h3 = graph.create_handle("GGG".as_bytes(), 3);
+        let h4 = graph.create_handle("AAA".as_bytes(), 4);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+
+        let index = Index::build(&graph, 3, 100, 100, None);
+
+        let input_seq = QuerySequence::from_string(&String::from("TTT"));
+        let anchors = anchors_for_query(&index, &input_seq);
+        assert_eq!(anchors.len(), 2);
+
+        let handle_anchor_0 = index.handle_from_seqpos(&anchors.get(0).unwrap().target_begin);
+        assert_eq!(u64::from(handle_anchor_0.id()), 4);
+        assert!(handle_anchor_0.is_reverse());
+        assert_eq!(
+            handle_anchor_0,
+            index.handle_from_seqpos(&anchors.get(0).unwrap().get_end_seqpos_inclusive())
+        );
+
+        let handle_anchor_1 = index.handle_from_seqpos(&anchors.get(1).unwrap().target_begin);
+        assert_eq!(u64::from(handle_anchor_1.id()), 1);
+        assert!(handle_anchor_1.is_reverse());
+        assert_eq!(
+            handle_anchor_1,
+            index.handle_from_seqpos(&anchors.get(1).unwrap().get_end_seqpos_inclusive())
+        );
+    }
+
+    #[test]
+    fn test_simple_anchors_reverse_2() {
+        let mut graph = HashGraph::new();
+        let h1 = graph.create_handle("AAA".as_bytes(), 1);
+        let h2 = graph.create_handle("CCC".as_bytes(), 2);
+        let h3 = graph.create_handle("GGG".as_bytes(), 3);
+        let h4 = graph.create_handle("AAA".as_bytes(), 4);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+
+        let index = Index::build(&graph, 9, 100, 100, None);
+
+        let input_seq = QuerySequence::from_string(&String::from("TTTCCCTTT"));
+        let anchors = anchors_for_query(&index, &input_seq);
+        assert_eq!(anchors.len(), 1);
+
+        let handle_anchor_start = index.handle_from_seqpos(&anchors.get(0).unwrap().target_begin);
+        assert_eq!(u64::from(handle_anchor_start.id()), 4);
+        assert!(handle_anchor_start.is_reverse());
+
+        let handle_anchor_end =
+            index.handle_from_seqpos(&anchors.get(0).unwrap().get_end_seqpos_inclusive());
+        assert_eq!(u64::from(handle_anchor_end.id()), 1);
+        assert!(handle_anchor_end.is_reverse());
     }
 
     #[test]
@@ -638,12 +706,58 @@ mod test {
     }
 
     #[test]
-    fn test_abpoa() {
-        unsafe {
-            let mut aligner: AbpoaAligner = AbpoaAligner::new_with_example_params();
-            aligner.add_nodes_edges(&vec!["ACG", "AAA"], &vec![(0, 1)]);
-            let res = aligner.align_sequence("ACG");
-            println!("Res is: {:#?}", res);
+    fn test_chains_reverse() {
+        let mut graph = HashGraph::new();
+        let h1 = graph.create_handle("AAA".as_bytes(), 1);
+        let h2 = graph.create_handle("CCC".as_bytes(), 2);
+        let h3 = graph.create_handle("GGG".as_bytes(), 3);
+        let h4 = graph.create_handle("AAA".as_bytes(), 4);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+
+        let index = Index::build(&graph, 3, 100, 100, None);
+
+        let input_seq = QuerySequence::from_string(&String::from("TTTCCCTTT"));
+        let mut anchors = anchors_for_query(&index, &input_seq);
+        println!("Found {} anchors", anchors.len());
+        let chains: Vec<Chain> = chain_anchors(
+            &mut anchors,
+            index.kmer_length,
+            50,
+            1000,
+            2,
+            0.5f64,
+            0.1f64,
+            60.0f64,
+            &input_seq,
+        );
+        println!("Found {} chains", chains.len());
+        println!("Chains are: {:#?}", chains);
+
+        let first_chain = chains.get(0).unwrap();
+        for anchor in first_chain.anchors.iter() {
+            let handle_anchor_start = index.handle_from_seqpos(&anchor.target_begin);
+            println!(
+                "Start handle: {:#?}, id: {:#?}",
+                handle_anchor_start.as_integer(),
+                u64::from(handle_anchor_start.id())
+            );
+
+            let handle_anchor_end = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
+            println!(
+                "End handle: {:#?}, id: {:#?}",
+                handle_anchor_end.as_integer(),
+                u64::from(handle_anchor_end.id())
+            );
         }
+
+        let po_range = find_range_chain(&index, chains.get(0).unwrap());
+        println!("po_range: {:#?}", po_range);
+        let expected_ids: Vec<u64> = vec![1, 2, 3, 4]; // Should be 4,3,2,1 but is sorted already
+        let po_range_ids: Vec<u64> = po_range.handles.iter().map(|x| u64::from(x.id())).collect();
+        assert_eq!(expected_ids, po_range_ids);
     }
 }
