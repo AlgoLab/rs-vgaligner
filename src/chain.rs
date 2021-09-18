@@ -10,10 +10,8 @@ use std::cmp::Ordering::Equal;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::ops::Range;
-use substring::Substring;
 
-use ab_poa::abpoa_wrapper::*;
-use bstr::{ByteSlice, ByteVec};
+use bstr::ByteSlice;
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 

@@ -11,7 +11,7 @@ use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelSliceMut};
+use rayon::prelude::IntoParallelRefIterator;
 use serde::{Deserialize, Serialize};
 
 use crate::kmer::KMER_POS_DELIMITER;
@@ -20,9 +20,7 @@ use rayon::iter::ParallelIterator;
 use std::ops::Range;
 use substring::Substring;
 
-use crate::serialization::SerializableHandle;
 use crate::serialization::{handle_vec_deser, handle_vec_ser};
-use serde_with::{serde_as, DisplayFromStr};
 
 /// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
 #[derive(Debug, Serialize, Deserialize)]
@@ -329,6 +327,9 @@ impl Index {
     // Get in which node a certain position is
     pub fn node_id_from_seqpos(&self, pos: &SeqPos) -> u64 {
         let rank = self.get_bv_rank(pos.position as usize) as u64;
+        //println!("fwd: {:#?}", self.seq_fwd);
+        //println!("rev: {:#?}", self.seq_rev);
+        //println!("Bitvec is: {:#?}, rank: {}", self.seq_bv, rank);
         //assert!(rank < self.node_ref.len() as u64 - 1);
 
         let result = match pos.orient {
@@ -341,6 +342,7 @@ impl Index {
 
     pub fn handle_from_seqpos(&self, pos: &SeqPos) -> Handle {
         let node_id = self.node_id_from_seqpos(pos);
+        //println!("Node is: {}", node_id);
         let handle = match pos.orient {
             SeqOrient::Forward => Handle::from_integer(node_id * 2),
             SeqOrient::Reverse => Handle::from_integer(node_id * 2 + 1),
@@ -443,7 +445,7 @@ impl Index {
         let node_ref = self.node_ref.get(node_ref_pos).unwrap();
         let next_node_ref = self.node_ref.get(node_ref_pos + 1).unwrap();
 
-        (node_ref.edge_idx as usize..next_node_ref.edge_idx as usize)
+        node_ref.edge_idx as usize..next_node_ref.edge_idx as usize
     }
 
     pub fn incoming_edges_from_handle(&self, handle: &Handle) -> Vec<Handle> {
@@ -455,7 +457,7 @@ impl Index {
         let incoming_edges: Vec<Handle> = match handle.is_reverse() {
             false => {
                 let incoming_edges_interval =
-                    (edges_interval.start..edges_interval.start + node_ref.edges_to_node as usize);
+                    edges_interval.start..edges_interval.start + node_ref.edges_to_node as usize;
                 self.edges[incoming_edges_interval].to_vec()
             }
             true => self
@@ -477,7 +479,7 @@ impl Index {
         let outgoing_edges: Vec<Handle> = match handle.is_reverse() {
             false => {
                 let outgoing_edges_interval =
-                    (edges_interval.start + node_ref.edges_to_node as usize..edges_interval.end);
+                    edges_interval.start + node_ref.edges_to_node as usize..edges_interval.end;
                 self.edges[outgoing_edges_interval].to_vec()
             }
             true => self
@@ -524,8 +526,6 @@ mod test {
     use super::*;
 
     use bstr::ByteVec;
-    use gfa::gfa::GFA;
-    use gfa::parser::GFAParser;
     use itertools::Itertools;
     use substring::Substring;
 
@@ -1320,17 +1320,47 @@ mod test {
     }
 
     #[test]
-    fn outgoing_handle_14() {
-        use std::path::PathBuf;
-        let parser = GFAParser::new();
-        let gfa: GFA<usize, ()> = parser
-            .parse_file(&PathBuf::from("./test/test.gfa"))
-            .unwrap();
-        let graph = HashGraph::from_gfa(&gfa);
+    fn test_reverse_handles() {
+        let mut graph = HashGraph::new();
+        let h1 = graph.create_handle("AAA".as_bytes(), 1);
+        let h2 = graph.create_handle("TTT".as_bytes(), 2);
+        let h3 = graph.create_handle("CCC".as_bytes(), 3);
+        let h4 = graph.create_handle("GGG".as_bytes(), 4);
 
-        let index = Index::build(&graph, 11, 100, 100, None);
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
 
-        let outgoing = index.outgoing_edges_from_handle(&Handle::from_integer(14));
-        println!("Outgoing: {:#?}", outgoing);
+        let index = Index::build(&graph, 3, 100, 100, None);
+
+        let mut handles: Vec<Handle> = graph.handles_iter().collect();
+        handles.sort();
+        for fwd_handle in handles {
+            let rev_handle = fwd_handle.flip();
+            let rev_seq = graph.sequence(rev_handle).into_string_lossy();
+            let fwd_seq = graph.sequence(fwd_handle).into_string_lossy();
+            //println!("Id: {}({}), Fwd is: {:#?}, Rev is: {:#?}", fwd_handle.id(), rev_handle.id(), fwd_seq, rev_seq);
+            let kpos = index.find_positions_for_query_kmer(rev_seq.as_str());
+            for pos in kpos {
+                //println!("Pos is: {:#?}", pos.start);
+                let retrieved_handle = index.handle_from_seqpos(&pos.start);
+                if retrieved_handle.is_reverse() {
+                    assert_eq!(index.handle_from_seqpos(&pos.start), rev_handle);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_seqpos_returns_all() {
+        let mut graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, None);
+        assert_eq!(index.seq_fwd.len(), index.seq_rev.len());
+        for i in 0..index.seq_fwd.len() {
+            for orient in vec![SeqOrient::Forward, SeqOrient::Reverse] {
+                index.handle_from_seqpos(&SeqPos::new(orient, i as u64));
+            }
+        }
     }
 }

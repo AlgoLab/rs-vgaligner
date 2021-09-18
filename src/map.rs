@@ -1,17 +1,16 @@
-use crate::chain::{anchors_for_query, chain_anchors, write_chain_gaf, Anchor, Chain};
+use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
-use handlegraph::hashgraph::HashGraph;
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
-use crate::align::{best_alignment_for_query, obtain_base_level_alignment, GAFAlignment};
+use crate::align::{best_alignment_for_query, GAFAlignment};
 use rayon::iter::ParallelIterator;
 
 /// Map the [input] reads against the [index].
-// TODO: add explaination to other parameters
+// TODO: add explanation to other parameters
 pub fn map_reads(
     index: &Index,
     inputs: &Vec<QuerySequence>,
@@ -34,6 +33,16 @@ pub fn map_reads(
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
             let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
+
+            /*
+            for anchor in &seq_anchors {
+                println!("Anchor: {}, start_id: {}, end_id: {}",
+                         anchor.id,
+                         index.handle_from_seqpos(&anchor.target_begin).id(),
+                         index.handle_from_seqpos(&anchor.target_end).id()
+                );
+            }
+             */
 
             // Chain close anchors together to find longer matches
             let seq_chains: Vec<Chain> = chain_anchors(

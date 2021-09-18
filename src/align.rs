@@ -1,24 +1,20 @@
 use crate::chain::Chain;
 use crate::index::Index;
-use crate::io::QuerySequence;
-use crate::kmer::{SeqOrient, SeqPos};
 use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
-use bstr::ByteVec;
 use core::cmp;
 use handlegraph::handle::Handle;
-use handlegraph::handlegraph::HandleGraph;
-use handlegraph::hashgraph::HashGraph;
 use itertools::Itertools;
 use rayon::prelude::*;
 use std::ops::Range;
-use substring::Substring;
 
 pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
+    //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .par_iter()
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
-    alignments.sort_by(|a, b| a.path_length.cmp(&b.path_length));
+    alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
+    //println!("Alignments: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
 
@@ -56,6 +52,7 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
     }
     let alignment: GAFAlignment = generate_alignment(
+        index,
         chain,
         &result,
         &po_range,
@@ -104,10 +101,10 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         .max()
         .unwrap();
 
-    //println!("Min handle: {:#?}", min_handle);
-    //println!("Max handle: {:#?}", max_handle);
+    //println!("Min id: {}, handle: {:#?}", min_handle.id(), min_handle);
+    //println!("Max id: {}, handle: {:#?}", max_handle.id(), max_handle);
 
-    // If on reverse strand the range min and max will be reversed
+    // If on reverse strand the range min and max could be reversed
     if min_handle > max_handle {
         // But this should never happen in other cases...
         assert!(min_handle.is_reverse());
@@ -215,10 +212,13 @@ fn find_nodes_edges_for_abpoa(
                 .filter(|target_handle| range_handles.contains(target_handle))
                 // And find their 0-based position in the po range
                 .map(|target_handle| {
-                    let starting_pos = range_handles.par_iter().position(|x| *x == handle).unwrap();
+                    let starting_pos = range_handles
+                        .par_iter()
+                        .position_any(|x| *x == handle)
+                        .unwrap();
                     let ending_pos = range_handles
                         .par_iter()
-                        .position(|x| *x == target_handle)
+                        .position_any(|x| *x == target_handle)
                         .unwrap();
                     (starting_pos, ending_pos)
                 }) //(handle.as_integer() - po_range.par_iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.par_iter().min().unwrap().as_integer()))
@@ -356,12 +356,15 @@ unsafe fn align_with_poa(
 }
 
 fn generate_alignment(
+    index: &Index,
     chain: &Chain,
     result: &AbpoaAlignmentResult,
     po_range: &OrientedGraphRange,
     subquery_range: &Range<u64>,
     og_query_length: usize,
 ) -> GAFAlignment {
+    println!("CIGAR: {:#?}", result.cigar);
+
     // Get the nodes involved in the alignment from abPOA
     let mut alignment_path = result.graph_nodes.clone();
     //println!("Alignment path is: {:#?}\n", alignment_path);
@@ -413,37 +416,14 @@ fn generate_alignment(
         path_end: result.abpoa_nodes.len() as u64 - 1, //og_path_end,
         residue: 0,
         alignment_block_length: result.n_aligned_bases as u64,
-        mapping_quality: 255,            //result.best_score as u64,
-        notes: ("as:i:-30".to_string()), //+ " " + "cg:Z:" + result.cigar.as_str()),
+        mapping_quality: 255, //result.best_score as u64,
+        notes: ("as:i:-30".to_string() + " " + result.cs_string.as_str()), //+ " " + "cg:Z:" + result.cigar.as_str()),
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::chain::Chain;
-    use crate::index::Index;
-    use gfa::gfa::GFA;
-    use gfa::parser::GFAParser;
-    use handlegraph::hashgraph::HashGraph;
 
     #[test]
     fn test_find_node_edges() {}
-
-    /*
-    fn graph_from_file() -> HashGraph {
-        let parser = GFAParser::new();
-        let gfa: GFA<usize, ()> = parser
-            .parse_file(&PathBuf::from("./test/test.gfa"))
-            .unwrap();
-        let graph = HashGraph::from_gfa(&gfa);
-        graph
-    }
-
-    #[test]
-    fn test_po_range() {
-        let graph = graph_from_file();
-        let index = Index::build(&graph, 11, 100, 100, 7.0, None);
-    }
-
-     */
 }
