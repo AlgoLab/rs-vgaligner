@@ -1,0 +1,3 @@
+[submodule "experiments/rs-vgaligner-experiments"]
+	path = experiments/rs-vgaligner-experiments
+	url = https://github.com/HopedWall/rs-vgaligner-experiments
