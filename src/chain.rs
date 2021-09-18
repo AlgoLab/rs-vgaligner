@@ -1,23 +1,17 @@
-use crate::index::Index;
-use crate::io::QuerySequence;
-use bio::data_structures::interval_tree::*;
 use core::cmp;
-use float_cmp::approx_eq;
-
-use rayon::prelude::*;
 use std::cmp::min;
 use std::cmp::Ordering::Equal;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::ops::Range;
 
-use bstr::ByteSlice;
-use handlegraph::handlegraph::HandleGraph;
-use handlegraph::hashgraph::HashGraph;
+use bio::data_structures::interval_tree::*;
+use float_cmp::approx_eq;
+use rayon::prelude::*;
 
+use crate::index::Index;
+use crate::io::QuerySequence;
 use crate::kmer::{SeqOrient, SeqPos};
-use handlegraph::handle::Handle;
-use itertools::Itertools;
 
 // Instead of using pointers like in the original implementation,
 // now each Anchor has an id, and the best predecessor is
@@ -194,7 +188,7 @@ impl Chain {
 
         let max_query_pos: u64 = self.anchors.par_iter().map(|a| a.query_end).max().unwrap();
 
-        (min_query_pos..max_query_pos)
+        min_query_pos..max_query_pos
     }
 }
 
@@ -470,10 +464,8 @@ pub fn write_chain_gaf(
 
 #[cfg(test)]
 mod test {
-    use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
-    use crate::index::Index;
-    use crate::io::QuerySequence;
-    use crate::kmer::SeqOrient;
+    use std::path::PathBuf;
+
     use ab_poa::abpoa_wrapper::AbpoaAligner;
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
@@ -481,8 +473,11 @@ mod test {
     use handlegraph::hashgraph::HashGraph;
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
-    use rayon::prelude::ParallelSliceMut;
-    use std::path::PathBuf;
+
+    use crate::chain::{anchors_for_query, chain_anchors, Chain};
+    use crate::index::Index;
+    use crate::io::QuerySequence;
+    use crate::kmer::SeqOrient;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
@@ -539,7 +534,7 @@ mod test {
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
-        let mut anchors = anchors_for_query(&index, &input_seq);
+        let anchors = anchors_for_query(&index, &input_seq);
 
         // There are at least 4 3-mers in the query, there can be more because
         // a kmer can appear in multiple positions

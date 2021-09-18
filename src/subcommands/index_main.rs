@@ -1,7 +1,9 @@
+use std::path::PathBuf;
+
 use clap::ArgMatches;
 use gfa::{gfa::GFA, parser::GFAParser};
 use handlegraph::hashgraph::HashGraph;
-use std::path::PathBuf;
+
 use crate::index::Index;
 
 pub fn index_main(global_matches : &ArgMatches) {

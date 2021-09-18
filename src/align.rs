@@ -1,11 +1,13 @@
-use crate::chain::Chain;
-use crate::index::Index;
-use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
 use core::cmp;
+use std::ops::Range;
+
+use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
 use handlegraph::handle::Handle;
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::ops::Range;
+
+use crate::chain::Chain;
+use crate::index::Index;
 
 pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
@@ -46,7 +48,7 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     //println!("Subquery is: {:#?}", subquery);
 
     // Align with abpoa
-    let mut result = AbpoaAlignmentResult::new();
+    let result: AbpoaAlignmentResult;
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
         result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
@@ -114,8 +116,8 @@ fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         max_handle = temp;
     }
 
-    let mut po_range_handles: Vec<Handle> = Vec::new();
-    let mut orient: RangeOrient = RangeOrient::Both;
+    let mut po_range_handles: Vec<Handle>;
+    let orient: RangeOrient;
 
     /*
     println!(
@@ -363,7 +365,7 @@ fn generate_alignment(
     subquery_range: &Range<u64>,
     og_query_length: usize,
 ) -> GAFAlignment {
-    println!("CIGAR: {:#?}", result.cigar);
+    //println!("CIGAR: {:#?}", result.cigar);
 
     // Get the nodes involved in the alignment from abPOA
     let mut alignment_path = result.graph_nodes.clone();

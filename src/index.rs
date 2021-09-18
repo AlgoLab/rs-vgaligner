@@ -1,26 +1,25 @@
-use crate::dna::reverse_complement;
-use crate::kmer::{
-    generate_hash, generate_kmers, generate_kmers_parallel, generate_pos_on_ref_2, GraphKmer,
-    KmerPos, SeqOrient, SeqPos,
-};
-use crate::serialization::{deserialize_object_from_file, serialize_object_to_file};
-use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
+use std::ops::Range;
 
 use boomphf::hashmap::NoKeyBoomHashMap;
 use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::prelude::IntoParallelRefIterator;
-use serde::{Deserialize, Serialize};
-
-use crate::kmer::KMER_POS_DELIMITER;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
-use std::ops::Range;
+use rayon::prelude::IntoParallelRefIterator;
+use serde::{Deserialize, Serialize};
 use substring::Substring;
 
+use crate::dna::reverse_complement;
+use crate::kmer::KMER_POS_DELIMITER;
+use crate::kmer::{
+    generate_hash, generate_kmers, generate_kmers_parallel, generate_pos_on_ref_2, GraphKmer,
+    KmerPos, SeqOrient, SeqPos,
+};
+use crate::serialization::{deserialize_object_from_file, serialize_object_to_file};
 use crate::serialization::{handle_vec_deser, handle_vec_ser};
+use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
 
 /// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
 #[derive(Debug, Serialize, Deserialize)]
@@ -517,17 +516,15 @@ impl Index {
 
 #[cfg(test)]
 mod test {
-
+    use bstr::ByteVec;
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
+    use itertools::Itertools;
+    use substring::Substring;
 
     use crate::kmer::{generate_hash, generate_kmers_linearly, SeqOrient, SeqPos};
 
     use super::*;
-
-    use bstr::ByteVec;
-    use itertools::Itertools;
-    use substring::Substring;
 
     /// This function creates a simple graph, used for debugging
     ///          | 2: CT \
@@ -1054,7 +1051,7 @@ mod test {
     #[test]
     fn test_index_access_bv() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
 
         //println!("Node ref: {:#?}", index.node_ref);
@@ -1078,7 +1075,7 @@ mod test {
     #[test]
     fn test_index_access_edges() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
 
         for handle in graph.handles_iter().sorted() {
@@ -1100,7 +1097,7 @@ mod test {
     #[test]
     fn test_index_access_nodes() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
 
         let pos1 = SeqPos {
@@ -1140,7 +1137,7 @@ mod test {
     #[test]
     fn test_edges_from_handle() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
@@ -1166,7 +1163,7 @@ mod test {
     #[test]
     fn test_index_incoming_outgoing_edges() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
 
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
@@ -1249,7 +1246,7 @@ mod test {
     #[test]
     fn test_index_seq_from_start_end_seqpos() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
 
         let begin = SeqPos::new(SeqOrient::Forward, 0);
@@ -1274,7 +1271,7 @@ mod test {
     #[test]
     fn test_seq_from_handle() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
@@ -1304,7 +1301,7 @@ mod test {
     #[test]
     fn test_handle_from_seqpos() {
         // Build the index
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
@@ -1339,7 +1336,7 @@ mod test {
         for fwd_handle in handles {
             let rev_handle = fwd_handle.flip();
             let rev_seq = graph.sequence(rev_handle).into_string_lossy();
-            let fwd_seq = graph.sequence(fwd_handle).into_string_lossy();
+            let _fwd_seq = graph.sequence(fwd_handle).into_string_lossy();
             //println!("Id: {}({}), Fwd is: {:#?}, Rev is: {:#?}", fwd_handle.id(), rev_handle.id(), fwd_seq, rev_seq);
             let kpos = index.find_positions_for_query_kmer(rev_seq.as_str());
             for pos in kpos {
@@ -1354,7 +1351,7 @@ mod test {
 
     #[test]
     fn test_seqpos_returns_all() {
-        let mut graph = create_simple_graph();
+        let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
         assert_eq!(index.seq_fwd.len(), index.seq_rev.len());
         for i in 0..index.seq_fwd.len() {

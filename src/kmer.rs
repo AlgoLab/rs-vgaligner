@@ -1,22 +1,18 @@
-use std::cmp::{min, Ordering};
+use std::cmp::min;
 use std::collections::VecDeque;
 
+use crate::utils::NodeRef;
 use ahash::CallHasher;
 use ahash::RandomState;
-
 use bstr::ByteVec;
 use handlegraph::handle::{Direction, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::pathgraph::PathHandleGraph;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use substring::Substring;
-
-use crate::serialization::SerializableHandle;
-use crate::utils::NodeRef;
-use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
-
-use rayon::iter::ParallelIterator;
 
 #[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
 // Forward is 0 in dozyg, Rev is 1
@@ -311,8 +307,8 @@ fn find_kmers_starting_in_handle(
     [true, false]
         .par_iter()
         .flat_map(|handle_orient| {
-            let mut handle: Handle;
-            let mut orient: bool;
+            let handle: Handle;
+            let orient: bool;
 
             match handle_orient {
                 true => {
@@ -913,8 +909,9 @@ pub fn generate_hash(seq: &String) -> u64 {
 
 #[cfg(test)]
 mod test {
-    use crate::kmer::{SeqOrient, SeqPos};
     use rayon::prelude::ParallelSliceMut;
+
+    use crate::kmer::{SeqOrient, SeqPos};
 
     #[test]
     fn test_assert_seqorient_ordering() {

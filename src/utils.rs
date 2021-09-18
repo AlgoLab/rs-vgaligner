@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 
-use bstr::{ByteSlice, ByteVec};
+use bstr::ByteVec;
 use bv::*;
 use gfa::gfa::Orientation;
-use handlegraph::handle::{Direction, Edge, Handle, NodeId};
+use handlegraph::handle::{Direction, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use rayon::iter::ParallelIterator;
@@ -87,7 +87,7 @@ pub fn find_forward_sequence(
 ) -> String {
     let mut forward: String = String::new();
     let mut bv_pos: u64 = 0;
-    let mut edge_pos: u64 = 0;
+    //let mut edge_pos: u64 = 0;
 
     // Sort both handles and edges since this is a PO
     let mut graph_handles: Vec<Handle> = graph.handles_iter().collect();

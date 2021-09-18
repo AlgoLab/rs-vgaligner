@@ -1,11 +1,12 @@
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fs::File;
 use std::io::{BufReader, Write};
 
 use handlegraph::handle::Handle;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 #[derive(Serialize, Deserialize)]
 //#[serde(remote = "Handle")]
 // Use this struct as a template for serializing the Handle, as Handle does not support Serde

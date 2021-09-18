@@ -1,7 +1,8 @@
 use clap::ArgMatches;
-use crate::map::map_reads;
+
 use crate::index::Index;
 use crate::io::read_seqs_from_file;
+use crate::map::map_reads;
 
 pub fn map_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();

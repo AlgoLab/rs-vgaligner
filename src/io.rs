@@ -1,9 +1,9 @@
 use std::ffi::OsStr;
 use std::fs::File;
-
 use std::io::prelude::*;
 use std::io::{BufReader, Result};
 use std::path::Path;
+
 use substring::Substring;
 
 #[derive(PartialEq)]

@@ -1,13 +1,13 @@
-use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
-use crate::index::Index;
-use crate::io::QuerySequence;
-
-use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::fs::File;
 use std::io::Write;
 
-use crate::align::{best_alignment_for_query, GAFAlignment};
 use rayon::iter::ParallelIterator;
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
+
+use crate::align::{best_alignment_for_query, GAFAlignment};
+use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
+use crate::index::Index;
+use crate::io::QuerySequence;
 
 /// Map the [input] reads against the [index].
 // TODO: add explanation to other parameters
@@ -145,13 +145,15 @@ fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> s
 
 #[cfg(test)]
 mod test {
-    use crate::index::Index;
-    use crate::io::read_seqs_from_file;
-    use crate::map::map_reads;
+    use std::path::PathBuf;
+
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
     use handlegraph::hashgraph::HashGraph;
-    use std::path::PathBuf;
+
+    use crate::index::Index;
+    use crate::io::read_seqs_from_file;
+    use crate::map::map_reads;
 
     #[test]
     fn test_map_no_alignment() {
