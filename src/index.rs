@@ -21,13 +21,16 @@ use crate::serialization::{deserialize_object_from_file, serialize_object_to_fil
 use crate::serialization::{handle_vec_deser, handle_vec_ser};
 use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
 
-/// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph
+/// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph.
+/// This index is essentially comprised of:
+/// - forward and reverse linearizations of the graph
+/// - kmers represented as oriented positions (in the fwd/rev linearizations)
+/// - other additional data structures that compactly represent the topology of the graph
+/// (seq bv, edges, n_nodes, etc.)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
     /// The kmer size that this graph was built on
     pub kmer_length: u64,
-    // consider only kmers where to_key(kmer) % sampling_mod == 0
-    //sampling_length: u64,
 
     // Various data related to the starting graph -----
     /// Total sequence length of the graph (= length of the forward/reverse)
@@ -38,18 +41,14 @@ pub struct Index {
     pub(crate) seq_rev: String,
     /// Mark node starts in forward
     pub seq_bv: BitVec,
-    // lets us map between our seq vector and handles (when our input graph is compacted!)
-    //seq_by_rank: BitVec,
     /// Edge count of the input graph
     n_edges: u64,
-    // what's the most-efficient graph topology we can store?
     /// Edges of the input graph
     #[serde(serialize_with = "handle_vec_ser")]
     #[serde(deserialize_with = "handle_vec_deser")]
     pub edges: Vec<Handle>,
     /// Node count of the input graph
     n_nodes: u64,
-    // refer to ranges in edges
     /// Compactly represent nodes and edges of the input graph
     pub node_ref: Vec<NodeRef>,
     // End of various data related to the starting graph -----
@@ -227,7 +226,7 @@ impl Index {
             index.n_kmers, index.n_kmer_pos
         );
 
-        // Store the index as multiple files
+        // Store the index in the .idx file
         if let Some(out_prefix) = out_prefix {
             match index.store_with_prefix(out_prefix.to_string()) {
                 Err(e) => panic!("{}", e),
@@ -323,7 +322,8 @@ impl Index {
 
     // ------- Bitvec operations -------
 
-    // Get in which node a certain position is
+    /// Find to which node (of the original graph) a certain position (in the linearization)
+    /// belongs to.
     pub fn node_id_from_seqpos(&self, pos: &SeqPos) -> u64 {
         //let rank = self.get_bv_rank(pos.position as usize) as u64;
         //println!("fwd: {:#?}", self.seq_fwd);
@@ -349,6 +349,8 @@ impl Index {
         result
     }
 
+    /// Find to which handle (of the original graph) a certain position (in the linearization)
+    /// belongs to.
     pub fn handle_from_seqpos(&self, pos: &SeqPos) -> Handle {
         let node_id = self.node_id_from_seqpos(pos);
         //println!("Node is: {}", node_id);
@@ -359,6 +361,8 @@ impl Index {
         handle
     }
 
+    /// Find the rank (starting from the left) of a given position.
+    /// Useful for finding the nodeid of a seqpos with the forward orient.
     pub fn get_bv_rank(&self, pos: usize) -> usize {
         assert!(pos < self.seq_bv.len() as usize);
 
@@ -373,6 +377,8 @@ impl Index {
         rank
     }
 
+    /// Find the rank (starting from the left) of a given position.
+    /// Useful for finding the nodeid of a seqpos with the reverse orient.
     pub fn get_bv_inverse_rank(&self, pos: usize) -> usize {
         assert!(pos < self.seq_bv.len() as usize);
 
@@ -412,16 +418,21 @@ impl Index {
 
     // TODO: maybe add some checks for input handle (not really necessary but...)
 
+    /// Find the position of a certain handle in the noderef.
     pub fn noderef_pos_from_handle(&self, handle: &Handle) -> usize {
         (u64::from(handle.id()) - 1) as usize
     }
 
+    /// Find the noderef of a certain handle.
     pub fn noderef_from_handle(&self, handle: &Handle) -> &NodeRef {
         //Obtain id and remove 1 (because kmerpos are 0-based)
         let node_ref_pos = self.noderef_pos_from_handle(handle);
         self.node_ref.get(node_ref_pos).unwrap()
     }
 
+    /// Find the sequence (=label) of a given handle.
+    /// This is the equivalent of graph.sequence(handle), but it does
+    /// not require the original graph.
     pub fn seq_from_handle(&self, handle: &Handle) -> String {
         let curr_node_ref = self.noderef_from_handle(handle);
         let curr_handle_pos = self.noderef_pos_from_handle(handle);
@@ -454,6 +465,7 @@ impl Index {
         ref_seq.substring(start, end).to_string()
     }
 
+    /// Find all the edges that start/end in a given handle.
     pub fn edges_from_handle(&self, handle: &Handle) -> &[Handle] {
         assert!(u64::from(handle.id()) <= self.n_nodes);
 
@@ -462,6 +474,7 @@ impl Index {
         edges
     }
 
+    /// Find the interval (in index.edges) of the edges for a given handle.
     fn edges_interval_from_handle(&self, handle: &Handle) -> Range<usize> {
         assert!(u64::from(handle.id()) <= self.n_nodes);
 
@@ -473,6 +486,9 @@ impl Index {
         node_ref.edge_idx as usize..next_node_ref.edge_idx as usize
     }
 
+    /// Find the incoming edges to a given handle.
+    /// This is the equivalent of graph.edges_iter() with a left orient, but
+    /// does not require the graph.
     pub fn incoming_edges_from_handle(&self, handle: &Handle) -> Vec<Handle> {
         assert!(u64::from(handle.id()) <= self.n_nodes);
 
@@ -495,6 +511,9 @@ impl Index {
         incoming_edges
     }
 
+    /// Find the outgoing edges of a given handle.
+    /// This is the equivalent of graph.edges_iter() with a right orient, but
+    /// does not require the graph.
     pub fn outgoing_edges_from_handle(&self, handle: &Handle) -> Vec<Handle> {
         assert!(u64::from(handle.id()) <= self.n_nodes);
 
@@ -519,6 +538,7 @@ impl Index {
         outgoing_edges
     }
 
+    /// Find the sequence implied by a range of seqpos.
     pub fn seq_from_start_end_seqpos(&self, begin: &SeqPos, end: &SeqPos) -> String {
         let substring = match (begin.orient, end.orient) {
             (SeqOrient::Forward, SeqOrient::Forward) => self

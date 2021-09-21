@@ -9,18 +9,21 @@ use handlegraph::handle::{Direction, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::pathgraph::PathHandleGraph;
+use itertools::Itertools;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use substring::Substring;
 
 #[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
-// Forward is 0 in dozyg, Rev is 1
+/// Represents the orientation of a SeqPos. (Forward is 0 in dozyg, Reverse is 1)
 pub enum SeqOrient {
     Forward,
     Reverse,
 }
 
+/// Represents an oriented position, mostly used to represent positions
+/// on the forward/reverse linearization of the kmers.
 #[derive(Clone, Copy, Eq, Debug, Serialize, Deserialize, Ord, PartialOrd, PartialEq)]
 pub struct SeqPos {
     pub orient: SeqOrient,
@@ -45,9 +48,9 @@ impl SeqPos {
 pub struct GraphKmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
-    /// The start position relative to the handle
+    /// The start position relative to the first_handle
     pub(crate) begin_offset: SeqPos,
-    /// The end position relative to the handle
+    /// The end position relative to the last_handle
     pub(crate) end_offset: SeqPos,
     /// The first handle of the kmer
     //#[serde(with = "SerializableHandle")]
@@ -95,8 +98,7 @@ pub fn generate_kmers(
 ) -> Vec<GraphKmer> {
     let mut complete_kmers: Vec<GraphKmer> = Vec::new();
 
-    let mut sorted_graph_handles: Vec<Handle> = graph.handles_iter().collect();
-    sorted_graph_handles.sort();
+    let sorted_graph_handles: Vec<Handle> = graph.handles_iter().sorted().collect();
 
     for forward_handle in sorted_graph_handles {
         let mut handle: Handle;
@@ -270,6 +272,8 @@ pub fn generate_kmers(
     complete_kmers
 }
 
+/// Get the graph kmers in parallel. This is equivalent to generate_kmers but is much
+/// faster (thanks to Rayon).
 pub fn generate_kmers_parallel(
     graph: &HashGraph,
     k: u64,
@@ -296,6 +300,7 @@ pub fn generate_kmers_parallel(
     complete_kmers
 }
 
+/// Get all the kmers (on both orientations) that start in a given handle, in parallel.
 fn find_kmers_starting_in_handle(
     forward_handle: &Handle,
     graph: &HashGraph,
@@ -326,6 +331,7 @@ fn find_kmers_starting_in_handle(
         .collect()
 }
 
+/// Get the kmers in a given orientation that start in a given handle, in parallel.
 fn generate_kmer_with_handle_orient(
     graph: &HashGraph,
     handle_in: Handle,

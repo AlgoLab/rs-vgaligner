@@ -9,8 +9,13 @@ use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
-/// Map the [input] reads against the [index].
-// TODO: add explanation to other parameters
+/// Map the [input] reads against the [index], in order to obtain Chains
+/// (and eventually POA Alignments is [also_align]), which can be printed to console
+/// with [out-console] or store the in a file with prefix [out_prefix].
+/// Additional parameters include:
+/// - [bandwidth] which specifies the search distance
+/// - [max_gap] which specifies the maximum distance of anchors that can be chained
+/// - [chain_min_n_anchors] which specifies the minimum number of anchors that make up a chain
 pub fn map_reads(
     index: &Index,
     inputs: &Vec<QuerySequence>,
@@ -28,7 +33,7 @@ pub fn map_reads(
 
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
-        .into_iter()
+        .into_par_iter()
         .filter_map(|query| {
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
@@ -121,7 +126,7 @@ pub fn map_reads(
     // Perform the alignment with rs-abPOA, using the chains as a reference
     if also_align {
         let alignments: Vec<GAFAlignment> = chains
-            .iter()
+            .par_iter()
             .map(|query_chains| best_alignment_for_query(index, query_chains))
             .collect();
 

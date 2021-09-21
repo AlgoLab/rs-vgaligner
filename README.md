@@ -25,6 +25,14 @@ and run:
 cargo install --path .
 ```
 
+Graphs must be sorted in order to ensure that vgaligner works correctly.
+You can do so with [odgi](https://github.com/pangenome/odgi):
+
+```
+odgi sort -i unsorted_graph.gfa -o sorted_graph.odgi -p Ygs -P
+odgi view -i sorted_graph.odgi -g > graph.gfa
+```
+
 ### Index
 
 Generate the index with the following command:

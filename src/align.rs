@@ -9,10 +9,11 @@ use rayon::prelude::*;
 use crate::chain::Chain;
 use crate::index::Index;
 
+/// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
-        .iter()
+        .par_iter()
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
     alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
@@ -20,6 +21,7 @@ pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAF
     alignments.first().cloned().unwrap()
 }
 
+/// Get the POA alignment starting from a [chain].
 pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
     let po_range = find_range_chain(index, chain);
@@ -68,12 +70,14 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     alignment
 }
 
+/// Represents the orientation of a range of nodes (= a subgraph but without edges) in a graph.
 #[derive(Debug)]
 pub enum RangeOrient {
     Forward,
     Reverse,
     Both,
 }
+/// Represents an oriented range of nodes of a graph.
 #[derive(Debug)]
 pub struct OrientedGraphRange {
     pub orient: RangeOrient,
@@ -88,6 +92,7 @@ impl OrientedGraphRange {
     }
 }
 
+/// Find the range of nodes implied by the chain.
 pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     /* -- old version: this did not work correctly for reverse handles
     let mut min_handle: Handle = chain
@@ -217,7 +222,9 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     }
 }
 
-/// Finds the nodes and edges involved in the alignment
+/// Finds the nodes and edges involved in the alignment. These are returned in a format
+/// compatible with rs-abpoa (https://github.com/HopedWall/rs-abPOA), see the
+/// "Interacting with abPOA" section for further details.
 pub(crate) fn find_nodes_edges_for_abpoa(
     index: &Index,
     po_range: &OrientedGraphRange,
@@ -286,6 +293,7 @@ pub(crate) fn find_nodes_edges_for_abpoa(
 
     NOTE: There can also be additional notes at the end.
 */
+/// Represents an alignment in GAF format.
 #[derive(Debug, Clone)]
 pub struct GAFAlignment {
     query_name: String,
@@ -381,7 +389,7 @@ fn find_nodes_edges(graph: &HashGraph, po_range: &Range<u64>) -> (Vec<String>, V
 }
 */
 
-/// Use rs-abpoa to align the sequences to the graph
+/// Use rs-abpoa to align the sequences to the graph.
 pub(crate) unsafe fn align_with_poa(
     nodes: &Vec<&str>,
     edges: &Vec<(usize, usize)>,
@@ -393,6 +401,7 @@ pub(crate) unsafe fn align_with_poa(
     res
 }
 
+/// Generate a GAF alignment from the result obtained from abPOA.
 pub(crate) fn generate_alignment(
     index: &Index,
     chain: &Chain,
