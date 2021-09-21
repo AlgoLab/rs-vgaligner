@@ -28,24 +28,27 @@ pub fn map_reads(
 
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
-        .into_par_iter()
+        .into_iter()
         .filter_map(|query| {
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
             let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
 
             /*
+            println!("noderef: {:#?}", index.node_ref);
             for anchor in &seq_anchors {
-                println!("Anchor: {}, start_id: {}, end_id: {}",
+                println!("Anchor: {}, start_id: {}, end_id: {}, start_pos: {:#?}, end_pos: {:#?}",
                          anchor.id,
                          index.handle_from_seqpos(&anchor.target_begin).id(),
-                         index.handle_from_seqpos(&anchor.target_end).id()
+                         index.handle_from_seqpos(&anchor.target_end).id(),
+                         anchor.target_begin,
+                         anchor.target_end
                 );
             }
              */
 
             // Chain close anchors together to find longer matches
-            let seq_chains: Vec<Chain> = chain_anchors(
+            let mut seq_chains: Vec<Chain> = chain_anchors(
                 &mut seq_anchors,
                 index.kmer_length,
                 bandwidth,
@@ -56,6 +59,24 @@ pub fn map_reads(
                 max_mapq,
                 query,
             );
+
+            //println!("Chains: {:#?}", seq_chains);
+            /*
+            for chain in &seq_chains {
+                for anchor in &chain.anchors {
+                    println!("Anchor: {}, \
+                         start_id: {}, end_id: {}, \
+                         start_pos: {:#?}, end_pos: {:#?}",
+                             anchor.id,
+                             index.handle_from_seqpos(&anchor.target_begin).id(),
+                             index.handle_from_seqpos(&anchor.target_end).id(),
+                             anchor.target_begin,
+                             anchor.target_end
+                    );
+                }
+                println!("\n\n")
+            }
+             */
 
             if !seq_chains.is_empty() {
                 Some(seq_chains)
@@ -100,7 +121,7 @@ pub fn map_reads(
     // Perform the alignment with rs-abPOA, using the chains as a reference
     if also_align {
         let alignments: Vec<GAFAlignment> = chains
-            .par_iter()
+            .iter()
             .map(|query_chains| best_alignment_for_query(index, query_chains))
             .collect();
 

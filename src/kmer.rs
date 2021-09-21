@@ -46,9 +46,9 @@ pub struct GraphKmer {
     /// The sequence of the kmer
     pub(crate) seq: String,
     /// The start position relative to the handle
-    pub(crate) begin: SeqPos,
+    pub(crate) begin_offset: SeqPos,
     /// The end position relative to the handle
-    pub(crate) end: SeqPos,
+    pub(crate) end_offset: SeqPos,
     /// The first handle of the kmer
     //#[serde(with = "SerializableHandle")]
     pub(crate) first_handle: Handle,
@@ -76,7 +76,7 @@ impl GraphKmer {
     /// kmer is on more than one handle
     fn extend_kmer(&mut self, new_seq: String, new_handle: Handle) {
         self.seq.push_str(&new_seq);
-        self.end = SeqPos::new_from_bool(new_handle.is_reverse(), new_seq.len() as u64);
+        self.end_offset = SeqPos::new_from_bool(new_handle.is_reverse(), new_seq.len() as u64);
         self.last_handle = new_handle;
     }
 
@@ -147,8 +147,8 @@ pub fn generate_kmers(
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
-                    end: SeqPos::new_from_bool(handle.is_reverse(), end),
+                    begin_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end_offset: SeqPos::new_from_bool(handle.is_reverse(), end),
                     first_handle: handle,
                     last_handle: handle,
                     handle_orient: orient,
@@ -368,8 +368,8 @@ fn generate_kmer_with_handle_orient(
             seq: handle_seq
                 .substring(begin as usize, end as usize)
                 .to_string(),
-            begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
-            end: SeqPos::new_from_bool(handle.is_reverse(), end),
+            begin_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
+            end_offset: SeqPos::new_from_bool(handle.is_reverse(), end),
             first_handle: handle,
             last_handle: handle,
             handle_orient: orient,
@@ -566,8 +566,8 @@ fn generate_kmers_linearly_forward(
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
-                    end: SeqPos::new_from_bool(handle.is_reverse(), end),
+                    begin_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end_offset: SeqPos::new_from_bool(handle.is_reverse(), end),
                     first_handle: *handle,
                     last_handle: *handle,
                     handle_orient: true,
@@ -659,8 +659,8 @@ pub fn generate_kmers_linearly_reverse(
                     seq: handle_seq
                         .substring(begin as usize, end as usize)
                         .to_string(),
-                    begin: SeqPos::new_from_bool(handle.is_reverse(), begin),
-                    end: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    begin_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
+                    end_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
                     first_handle: handle,
                     last_handle: handle,
                     handle_orient: false,
@@ -726,7 +726,7 @@ pub(crate) const KMER_POS_DELIMITER: KmerPos = KmerPos {
 };
 
 /// Obtain the position of a given handle in the serialized forward/reverse
-fn get_seq_pos(
+pub fn get_seq_pos(
     handle: &Handle,
     node_ref: &Vec<NodeRef>,
     ref_length: &u64,
@@ -734,7 +734,7 @@ fn get_seq_pos(
 ) -> u64 {
     let pos: u64;
 
-    let handle_rank: u64 = handle.unpack_number() - 1;
+    let handle_rank = handle.unpack_number() - 1;
     let node_starting_pos: u64 = node_ref.get(handle_rank as usize).unwrap().seq_idx;
 
     if handle.is_reverse() {
@@ -770,17 +770,17 @@ pub fn generate_pos_on_ref(
             node_ref,
             seq_length,
             &(first_handle_length as u64),
-        ) + kmer.begin.position;
+        ) + kmer.begin_offset.position;
         let end_ref = get_seq_pos(
             &last_handle_of_kmer,
             node_ref,
             seq_length,
             &(last_handle_length as u64),
-        ) + kmer.end.position;
+        ) + kmer.end_offset.position;
 
         let pos = KmerPos {
-            start: SeqPos::new(kmer.clone().begin.orient, start_ref),
-            end: SeqPos::new(kmer.clone().end.orient, end_ref),
+            start: SeqPos::new(kmer.clone().begin_offset.orient, start_ref),
+            end: SeqPos::new(kmer.clone().end_offset.orient, end_ref),
         };
         kmers_on_ref.push(pos);
     }
@@ -804,30 +804,32 @@ pub fn generate_pos_on_ref_2(
 
     for kmer in kmers_on_graph {
         let first_handle_of_kmer = kmer.first_handle;
-        let first_handle_node = graph.get_node(&first_handle_of_kmer.id()).unwrap();
-        let first_handle_length = first_handle_node.sequence.len();
+        let first_handle_seq = graph.sequence(first_handle_of_kmer).into_string_lossy();
+        let first_handle_length = first_handle_seq.len();
 
         let last_handle_of_kmer = kmer.last_handle;
-        let last_handle_node = graph.get_node(&last_handle_of_kmer.id()).unwrap();
-        let last_handle_length = last_handle_node.sequence.len();
+        let last_handle_seq = graph.sequence(last_handle_of_kmer).into_string_lossy();
+        let last_handle_length = last_handle_seq.len();
 
         let start_ref = get_seq_pos(
             &first_handle_of_kmer,
             node_ref,
             seq_length,
             &(first_handle_length as u64),
-        ) + kmer.begin.position;
+        ) + kmer.begin_offset.position;
         let end_ref = get_seq_pos(
             &last_handle_of_kmer,
             node_ref,
             seq_length,
             &(last_handle_length as u64),
-        ) + kmer.end.position;
+        ) + kmer.end_offset.position;
 
         let pos = KmerPos {
-            start: SeqPos::new(kmer.clone().begin.orient, start_ref),
-            end: SeqPos::new(kmer.clone().end.orient, end_ref),
+            start: SeqPos::new(kmer.clone().begin_offset.orient, start_ref),
+            end: SeqPos::new(kmer.clone().end_offset.orient, end_ref),
         };
+
+        //println!("{:#?}  ->  {:#?}", kmer, pos);
 
         last_kmer = match last_kmer {
             // This represents the first iteration

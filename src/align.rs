@@ -12,7 +12,7 @@ use crate::index::Index;
 pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
-        .par_iter()
+        .iter()
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
     alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
@@ -23,11 +23,13 @@ pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAF
 pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
     let po_range = find_range_chain(index, chain);
+    //println!("Graph range: {:#?}", po_range);
 
     // Find nodes and edges
     let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
+    //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
     //println!("Query seq: {:#?}", chain.query.seq);
     //println!("Seqs: {:?}, len {}, nested-len {}", nodes_str, nodes_str.len(), nodes_str.par_iter().map(|x| x.len()).sum::<usize>());
@@ -118,7 +120,6 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         // last included position
         .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .collect();
-
     let all_handles: Vec<Handle> = start_handles
         .into_par_iter()
         .chain(end_handles.into_par_iter())
@@ -126,8 +127,18 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     let mut min_handle: Handle = *all_handles.par_iter().min().unwrap();
     let mut max_handle: Handle = *all_handles.par_iter().max().unwrap();
 
-    //println!("Min id: {}, handle: {:#?}", min_handle.id(), min_handle);
-    //println!("Max id: {}, handle: {:#?}", max_handle.id(), max_handle);
+    /*
+    println!(
+        "Min id: {}, handle: {:#?}",
+        min_handle.id(),
+        min_handle.as_integer()
+    );
+    println!(
+        "Max id: {}, handle: {:#?}",
+        max_handle.id(),
+        max_handle.as_integer()
+    );
+     */
 
     /*
     // If on reverse strand the range min and max could be reversed
@@ -207,7 +218,7 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
 }
 
 /// Finds the nodes and edges involved in the alignment
-fn find_nodes_edges_for_abpoa(
+pub(crate) fn find_nodes_edges_for_abpoa(
     index: &Index,
     po_range: &OrientedGraphRange,
 ) -> (Vec<String>, Vec<(usize, usize)>) {
@@ -371,7 +382,7 @@ fn find_nodes_edges(graph: &HashGraph, po_range: &Range<u64>) -> (Vec<String>, V
 */
 
 /// Use rs-abpoa to align the sequences to the graph
-unsafe fn align_with_poa(
+pub(crate) unsafe fn align_with_poa(
     nodes: &Vec<&str>,
     edges: &Vec<(usize, usize)>,
     query: &str,
@@ -382,7 +393,7 @@ unsafe fn align_with_poa(
     res
 }
 
-fn generate_alignment(
+pub(crate) fn generate_alignment(
     index: &Index,
     chain: &Chain,
     result: &AbpoaAlignmentResult,

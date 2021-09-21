@@ -466,7 +466,7 @@ pub fn write_chain_gaf(
 mod test {
     use std::path::PathBuf;
 
-    use ab_poa::abpoa_wrapper::AbpoaAligner;
+    use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
     use handlegraph::handle::Edge;
@@ -474,13 +474,18 @@ mod test {
     use handlegraph::mutablehandlegraph::MutableHandleGraph;
     use handlegraph::pathgraph::PathHandleGraph;
 
-    use crate::align::find_range_chain;
+    use crate::align::align_with_poa;
+    use crate::align::find_nodes_edges_for_abpoa;
+    use crate::align::generate_alignment;
+    use crate::align::{find_range_chain, GAFAlignment};
     use crate::chain::{anchors_for_query, chain_anchors, Chain};
     use crate::index::Index;
     use crate::io::QuerySequence;
     use crate::kmer::SeqOrient;
     use ab_poa::abpoa::abpoa_align_sequence_to_subgraph;
     use handlegraph::handle::Handle;
+    use rayon::iter::ParallelIterator;
+    use rayon::prelude::IntoParallelRefIterator;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
@@ -759,5 +764,27 @@ mod test {
         let expected_ids: Vec<u64> = vec![1, 2, 3, 4]; // Should be 4,3,2,1 but is sorted already
         let po_range_ids: Vec<u64> = po_range.handles.iter().map(|x| u64::from(x.id())).collect();
         assert_eq!(expected_ids, po_range_ids);
+
+        // Find nodes and edges
+        let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
+        // TODO: possibly avoid this
+        let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
+
+        // Align with abpoa
+        let result: AbpoaAlignmentResult;
+        unsafe {
+            //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
+            result = align_with_poa(&nodes_str, &edges, first_chain.query.seq.as_str());
+        }
+        let alignment: GAFAlignment = generate_alignment(
+            &index,
+            first_chain,
+            &result,
+            &po_range,
+            //&subquery_range,
+            &(0 as u64..first_chain.query.seq.len() as u64),
+            first_chain.query.seq.len(),
+        );
+        println!("Alignment is: {:#?}", alignment);
     }
 }

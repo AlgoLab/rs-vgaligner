@@ -325,15 +325,25 @@ impl Index {
 
     // Get in which node a certain position is
     pub fn node_id_from_seqpos(&self, pos: &SeqPos) -> u64 {
-        let rank = self.get_bv_rank(pos.position as usize) as u64;
+        //let rank = self.get_bv_rank(pos.position as usize) as u64;
         //println!("fwd: {:#?}", self.seq_fwd);
         //println!("rev: {:#?}", self.seq_rev);
         //println!("Bitvec is: {:#?}, rank: {}", self.seq_bv, rank);
         //assert!(rank < self.node_ref.len() as u64 - 1);
 
+        // IMPORTANT NOTE: no matter the orientation, the returned
+        // node id should always be the same. The orient only
+        // matters when actually creating the Handle, where
+        // even => forward, odd => reverse.
         let result = match pos.orient {
-            SeqOrient::Forward => rank,
-            SeqOrient::Reverse => self.n_nodes - rank + 1,
+            SeqOrient::Forward => {
+                self.get_bv_rank(pos.position as usize) as u64
+            },
+            SeqOrient::Reverse => {
+                // TODO: to +1 or not to +1?
+                self.n_nodes - self.get_bv_inverse_rank(pos.position as usize) as u64 + 1
+            } //self.n_nodes - rank + 1,
+            //SeqOrient::Reverse => rank,
         };
 
         result
@@ -354,14 +364,30 @@ impl Index {
 
         let mut rank: usize = 0;
 
-        // +1 because I want it to stop at pos (and not pos-1)
-        for i in 0..pos + 1 {
+        for i in 0..=pos {
             if self.seq_bv.get(i as u64) == true {
                 rank += 1;
             }
         }
 
         rank
+    }
+
+    pub fn get_bv_inverse_rank(&self, pos: usize) -> usize {
+        assert!(pos < self.seq_bv.len() as usize);
+
+        let mut inverse_rank: usize = 0;
+
+        // -1 because last 1 (=end marker) does not matter
+        let start_point = (self.seq_bv.len() - 1) as usize;
+
+        for i in (start_point - pos..=start_point).rev() {
+            if self.seq_bv.get(i as u64) == true {
+                inverse_rank += 1;
+            }
+        }
+
+        inverse_rank
     }
 
     // Get where a certain node starts in the linearization
@@ -522,9 +548,13 @@ mod test {
     use itertools::Itertools;
     use substring::Substring;
 
-    use crate::kmer::{generate_hash, generate_kmers_linearly, SeqOrient, SeqPos};
+    use crate::kmer::{generate_hash, generate_kmers_linearly, get_seq_pos, SeqOrient, SeqPos};
 
     use super::*;
+    use crate::io::QuerySequence;
+    use gfa::gfa::GFA;
+    use gfa::parser::GFAParser;
+    use std::path::PathBuf;
 
     /// This function creates a simple graph, used for debugging
     ///          | 2: CT \
@@ -1303,16 +1333,19 @@ mod test {
         // Build the index
         let graph = create_simple_graph();
         let index = Index::build(&graph, 3, 100, 100, None);
-        let mut handles: Vec<Handle> = graph.handles_iter().collect();
-        handles.sort();
+        let mut handles: Vec<Handle> = graph.handles_iter().sorted().collect();
 
         let p1: SeqPos = SeqPos::new(SeqOrient::Forward, 0);
         assert_eq!(index.handle_from_seqpos(&p1), *handles.get(0).unwrap());
 
+        for handle in graph.handles_iter().sorted() {
+            println!("Handle is {:#?}", handle);
+        }
+
         let p2: SeqPos = SeqPos::new(SeqOrient::Reverse, 0);
         assert_eq!(
             index.handle_from_seqpos(&p2),
-            handles.get(3).unwrap().flip()
+            handles.last().unwrap().flip()
         );
     }
 
@@ -1359,5 +1392,165 @@ mod test {
                 index.handle_from_seqpos(&SeqPos::new(orient, i as u64));
             }
         }
+    }
+
+    #[test]
+    fn test_wrong_index() {
+        let mut graph = HashGraph::new();
+        let h1 = graph.create_handle("AAAAAAA".as_bytes(), 1);
+        let h2 = graph.create_handle("TTT".as_bytes(), 2);
+        let h3 = graph.create_handle("CCC".as_bytes(), 3);
+        let h4 = graph.create_handle("GGGGGGG".as_bytes(), 4);
+        let h5 = graph.create_handle("GGG".as_bytes(), 5);
+        let h6 = graph.create_handle("CCC".as_bytes(), 6);
+        let h7 = graph.create_handle("TTTTTTT".as_bytes(), 7);
+
+        graph.create_edge(&Edge(h1, h2));
+        graph.create_edge(&Edge(h1, h3));
+        graph.create_edge(&Edge(h2, h4));
+        graph.create_edge(&Edge(h3, h4));
+        graph.create_edge(&Edge(h4, h5));
+        graph.create_edge(&Edge(h4, h6));
+        graph.create_edge(&Edge(h5, h7));
+        graph.create_edge(&Edge(h6, h7));
+
+        let seq_length = find_graph_seq_length(&graph);
+
+        let mut seq_bv: BitVec = BitVec::new_fill(false, seq_length + 1);
+        let mut node_ref: Vec<NodeRef> = Vec::new();
+        let mut graph_edges: Vec<Handle> = Vec::new();
+        let mut n_edges: u64 = 0;
+        let seq_fwd = find_forward_sequence(
+            &graph,
+            &mut seq_bv,
+            &mut node_ref,
+            &mut graph_edges,
+            &mut n_edges,
+        );
+        let seq_rev = reverse_complement(&seq_fwd.as_str());
+
+        let kmer_length = 11;
+        let max_furcations = 100;
+        let max_degree = 100;
+        let kmers_on_graph: Vec<GraphKmer> = generate_kmers_parallel(
+            &graph,
+            kmer_length as u64,
+            Some(max_furcations),
+            Some(max_degree),
+        );
+        //println!("graph k: {:#?}", kmers_on_graph);
+
+        let mut sorted_handles: Vec<Handle> = graph.handles_iter().sorted().collect();
+
+        for handle in sorted_handles {
+            println!("Handle is: {:#?}, id: {}", handle, u64::from(handle.id()));
+            println!(
+                "seqpos: {}",
+                get_seq_pos(&handle, &node_ref, &seq_length, &1)
+            );
+            let flipped = handle.flip();
+            println!("Handle flipped? {} : {:#?}", flipped.is_reverse(), flipped);
+            println!(
+                "seqpos: {}",
+                get_seq_pos(&flipped, &node_ref, &seq_length, &0)
+            );
+            println!();
+        }
+
+        let mut kmers_hashes: Vec<u64> = Vec::new();
+        let mut kmers_start_offsets: Vec<u64> = Vec::new();
+        let kmers_pos_on_ref: Vec<KmerPos> = generate_pos_on_ref_2(
+            &graph,
+            &kmers_on_graph,
+            &seq_length,
+            &node_ref,
+            &mut kmers_hashes,
+            &mut kmers_start_offsets,
+        );
+
+        let kmers_table = NoKeyBoomHashMap::new_parallel(kmers_hashes.clone(), kmers_start_offsets);
+        // Obtain the index
+        let index = Index {
+            kmer_length,
+            //sampling_length: 0,
+            seq_length,
+            seq_fwd,
+            seq_rev,
+            seq_bv,
+            //seq_by_rank: Default::default(),
+            n_edges,
+            edges: graph_edges,
+            n_nodes: graph.handles_iter().count() as u64,
+            node_ref,
+            n_kmers: kmers_hashes.len() as u64,
+            n_kmer_pos: kmers_pos_on_ref.len() as u64,
+            bhpf: kmers_table,
+            kmer_pos_ref: kmers_hashes,
+            kmer_pos_table: kmers_pos_on_ref,
+            loaded: false,
+        };
+
+        for handle in graph.handles_iter().sorted() {
+            println!("Id is: {}", handle.unpack_number());
+        }
+
+        for i in 0..index.node_ref.len() - 1 {
+            let curr_node_ref = index.node_ref.get(i).unwrap();
+            assert_eq!(
+                (i + 1) as u64,
+                u64::from(index.node_id_from_seqpos(&SeqPos {
+                    orient: SeqOrient::Forward,
+                    position: curr_node_ref.seq_idx
+                }))
+            );
+            assert_eq!(
+                (index.n_nodes as usize - i) as u64,
+                u64::from(index.node_id_from_seqpos(&SeqPos {
+                    orient: SeqOrient::Reverse,
+                    position: curr_node_ref.seq_idx
+                }))
+            );
+        }
+
+        /*
+        let query = QuerySequence {
+            name: "".to_string(),
+            seq: "CACGAGAGAAACTCCCCCGTGATTCCTAATACTGGGAGTCAAAGAGAACTGCTCATCAGTTCATCTGAAGGATGGAATCTCCAGCGAGACTAGATTCCTT".to_string()
+        };
+
+        let query_kmers = query.split_into_kmers(kmer_length as usize);
+        let mut positions : Vec<KmerPos> = Vec::new();
+        for kmer in query_kmers {
+            positions.extend(index.find_positions_for_query_kmer(kmer.as_str()).into_iter());
+            //assert!(kmers_on_graph.iter().any(|k| k.seq == kmer))
+        }
+
+        for pos in positions {
+            println!("Handle: {:#?}, Node id: {}", index.handle_from_seqpos(&pos.start).as_integer(), u64::from(index.handle_from_seqpos(&pos.start).id()));
+        }
+
+        assert!(positions
+            .iter()
+            .any(|p| u64::from(index.handle_from_seqpos(&p.start).id()) == 10));
+         */
+    }
+
+    #[test]
+    fn test_inverse_rank() {
+        let graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, None);
+
+        println!("Seq bv: {:#?}", index.seq_bv);
+        let ranks: Vec<usize> = (0..index.seq_bv.len() - 1)
+            .into_iter()
+            .map(|i| index.get_bv_rank(i as usize))
+            .collect();
+        let inverse_ranks: Vec<usize> = (0..index.seq_bv.len() - 1)
+            .into_iter()
+            .map(|i| index.get_bv_inverse_rank(i as usize))
+            .collect();
+
+        assert_eq!(ranks, vec![1, 2, 2, 3, 3, 4, 4, 4]);
+        assert_eq!(inverse_ranks, vec![1, 1, 1, 2, 2, 3, 3, 4]);
     }
 }
