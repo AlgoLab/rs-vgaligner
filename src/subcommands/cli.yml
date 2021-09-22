@@ -41,6 +41,13 @@ subcommands:
             help: Maximum amount of edges to be traversed (defauts to 100)
             required: false
             takes_value: true
+        - sampling-rate:
+            short: r
+            long: sampling-rate
+            value_name: INTEGER
+            help: build a modimizer index by keeping kmers whose hash % sampling-rate == 0 (defaults to NOT using the modimizer)
+            required: false
+            takes_value: true
         - n-threads:
             short: n
             long: threads

@@ -36,6 +36,11 @@ pub fn index_main(global_matches : &ArgMatches) {
         .parse::<u64>()
         .unwrap();
 
+    let sampling_rate = match matches.value_of("sampling-rate") {
+        Some(rate) => Some(rate.parse::<u64>().unwrap()),
+        _ => None
+    };
+
     let n_threads = matches
         .value_of("n-threads")
         .unwrap_or(&"0")    // Use all available threads
@@ -62,5 +67,6 @@ pub fn index_main(global_matches : &ArgMatches) {
         max_furcations,
         max_degree,
         Some(out_prefix),
+        sampling_rate
     );
 }

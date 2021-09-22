@@ -279,6 +279,7 @@ pub fn generate_kmers_parallel(
     k: u64,
     edge_max: Option<u64>,
     degree_max: Option<u64>,
+    sampling_rate: Option<u64>,
 ) -> Vec<GraphKmer> {
     // Get a Vec for rayon
     let mut sorted_graph_handles: Vec<Handle> = graph.handles_iter().collect();
@@ -286,7 +287,9 @@ pub fn generate_kmers_parallel(
 
     let mut complete_kmers: Vec<GraphKmer> = sorted_graph_handles
         .par_iter()
-        .flat_map(|handle| find_kmers_starting_in_handle(&handle, &graph, k, edge_max, degree_max))
+        .flat_map(|handle| {
+            find_kmers_starting_in_handle(&handle, &graph, k, edge_max, degree_max, sampling_rate)
+        })
         .collect();
 
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
@@ -307,6 +310,7 @@ fn find_kmers_starting_in_handle(
     k: u64,
     edge_max: Option<u64>,
     degree_max: Option<u64>,
+    sampling_rate: Option<u64>,
 ) -> Vec<GraphKmer> {
     // Try all possible orientations
     [true, false]
@@ -326,7 +330,15 @@ fn find_kmers_starting_in_handle(
                 }
             }
 
-            generate_kmer_with_handle_orient(graph, handle, orient, k, edge_max, degree_max)
+            generate_kmer_with_handle_orient(
+                graph,
+                handle,
+                orient,
+                k,
+                edge_max,
+                degree_max,
+                sampling_rate,
+            )
         })
         .collect()
 }
@@ -339,6 +351,7 @@ fn generate_kmer_with_handle_orient(
     k: u64,
     edge_max: Option<u64>,
     degree_max: Option<u64>,
+    sampling_rate: Option<u64>,
 ) -> Vec<GraphKmer> {
     let mut handle: Handle = handle_in.clone();
     let mut complete_kmers: Vec<GraphKmer> = Vec::new();
@@ -370,10 +383,12 @@ fn generate_kmer_with_handle_orient(
     for i in 0..handle_length {
         let begin = i;
         let end = min(i + k, handle_length);
+        let seq = handle_seq
+            .substring(begin as usize, end as usize)
+            .to_string();
+
         let kmer = GraphKmer {
-            seq: handle_seq
-                .substring(begin as usize, end as usize)
-                .to_string(),
+            seq,
             begin_offset: SeqPos::new_from_bool(handle.is_reverse(), begin),
             end_offset: SeqPos::new_from_bool(handle.is_reverse(), end),
             first_handle: handle,
@@ -391,9 +406,9 @@ fn generate_kmer_with_handle_orient(
         // NOTE: this implies that the sequence encoded by the current handle
         // has size >= k
         if (kmer.seq.len() as u64) == k {
-            //if !complete_kmers.contains(&kmer) {
-            complete_kmers.push(kmer);
-            //}
+            if sampling_rate.is_none() || generate_hash(&kmer.seq) % sampling_rate.unwrap() == 0 {
+                complete_kmers.push(kmer);
+            }
         } else {
             // The kmer is incomplete, thus will have to be completed to reach size k
 
@@ -446,9 +461,11 @@ fn generate_kmer_with_handle_orient(
         }
 
         if (incomplete_kmer.seq.len() as u64) == k {
-            //if !complete_kmers.contains(&incomplete_kmer) {
-            complete_kmers.push(incomplete_kmer);
-            //}
+            if sampling_rate.is_none()
+                || generate_hash(&incomplete_kmer.seq) % sampling_rate.unwrap() == 0
+            {
+                complete_kmers.push(incomplete_kmer);
+            }
         } else {
             // NOTE: if there is no neighbor, the kmer does not get re-added
             // to the incomplete ones, so that the external loop can end

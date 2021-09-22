@@ -521,7 +521,7 @@ mod test {
     fn test_simple_anchors() {
         let mut graph = HashGraph::new();
         graph.create_handle("ACT".as_bytes(), 1);
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let query: String = String::from("ACT");
         let input_seq = QuerySequence::from_string(&query);
 
@@ -550,7 +550,7 @@ mod test {
         graph.create_edge(&Edge(h2, h4));
         graph.create_edge(&Edge(h3, h4));
 
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
 
         let input_seq = QuerySequence::from_string(&String::from("TTT"));
         let anchors = anchors_for_query(&index, &input_seq);
@@ -586,7 +586,7 @@ mod test {
         graph.create_edge(&Edge(h2, h4));
         graph.create_edge(&Edge(h3, h4));
 
-        let index = Index::build(&graph, 9, 100, 100, None);
+        let index = Index::build(&graph, 9, 100, 100, None, None);
 
         let input_seq = QuerySequence::from_string(&String::from("TTTCCCTTT"));
         let anchors = anchors_for_query(&index, &input_seq);
@@ -605,7 +605,7 @@ mod test {
     #[test]
     fn test_anchors() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let anchors = anchors_for_query(&index, &input_seq);
 
@@ -617,7 +617,7 @@ mod test {
     #[test]
     fn test_no_anchors() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from("AAATTT"));
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
@@ -626,7 +626,7 @@ mod test {
     #[test]
     fn test_no_anchors_2() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from(""));
         let anchors = anchors_for_query(&index, &input_seq);
         assert_eq!(anchors.len(), 0)
@@ -635,7 +635,7 @@ mod test {
     #[test]
     fn test_chains() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
@@ -666,7 +666,7 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None);
+        let index = Index::build(&graph, 11, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from(index.seq_fwd.clone()));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
@@ -693,7 +693,7 @@ mod test {
     #[test]
     fn test_no_chains() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None);
+        let index = Index::build(&graph, 3, 100, 100, None, None);
         let input_seq = QuerySequence::from_string(&String::from("AAATTT"));
         let mut anchors = anchors_for_query(&index, &input_seq);
         let chains: Vec<Chain> = chain_anchors(

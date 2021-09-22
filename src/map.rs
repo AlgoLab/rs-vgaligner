@@ -189,7 +189,7 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None);
+        let index = Index::build(&graph, 11, 100, 100, None, None);
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
@@ -205,7 +205,7 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None);
+        let index = Index::build(&graph, 11, 100, 100, None, None);
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
