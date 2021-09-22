@@ -55,7 +55,14 @@ vgaligner map -i {index.idx} -f {reads.fa/fq} -o {output.gaf}
 This will output the chains in GAF format. 
 
 If you also want to perform 
-the alignment with abPOA, you will need to pass the ```--also-align``` parameter. 
+the alignment with abPOA (this is highly recommended!), you will need to pass the ```--also-align``` parameter. 
 This will generate an additional GAF file which contains the alignment.
 
 You can see all of the available parameters with ```vgaligner map --help```.
+
+## Validation
+This tool has been tested on graphs obtained from [HLA-zoo](https://github.com/ekg/HLA-zoo). 
+
+You can find out more about validation ("experiments") 
+in [this repo](https://github.com/HopedWall/rs-vgaligner-experiments). 
+You can even run the experiments on your own PC! (warning: may require >16GB RAM)
