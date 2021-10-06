@@ -43,10 +43,9 @@ pub fn map_main(global_matches : &ArgMatches) {
         .parse::<u64>()
         .unwrap();
 
-    // TODO: review
-    let _align_best_n = matches
+    let align_best_n = matches
         .value_of("align-best-n")
-        .unwrap_or(&"100")
+        .unwrap_or(&"1")
         .parse::<u64>()
         .unwrap();
 
@@ -75,6 +74,6 @@ pub fn map_main(global_matches : &ArgMatches) {
     map_reads(&index, &query, 50, max_gap_length,
               chain_min_n_anchors, 0.5f64,
               max_mismatch_rate, 60.0f64,
-              write_console, Some(out_prefix), also_align
+              write_console, Some(out_prefix), also_align, align_best_n
     );
 }

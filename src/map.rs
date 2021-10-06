@@ -28,6 +28,7 @@ pub fn map_reads(
     write_console: bool,
     out_prefix: Option<&str>,
     also_align: bool,
+    align_best_n: u64,
 ) {
     println!("Found {} reads!", inputs.len());
 
@@ -83,6 +84,10 @@ pub fn map_reads(
             }
              */
 
+            // Sort the chains according to their number of anchors
+            // TODO: using the score would be better...
+            seq_chains.sort_by(|a, b| a.anchors.len().cmp(&b.anchors.len()));
+
             if !seq_chains.is_empty() {
                 Some(seq_chains)
             } else {
@@ -127,7 +132,7 @@ pub fn map_reads(
     if also_align {
         let alignments: Vec<GAFAlignment> = chains
             .par_iter()
-            .map(|query_chains| best_alignment_for_query(index, query_chains))
+            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n))
             .collect();
 
         if alignments.is_empty() {
@@ -193,7 +198,7 @@ mod test {
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false,
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false, 100,
         );
     }
 
@@ -209,7 +214,7 @@ mod test {
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true,
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true, 100,
         );
     }
 }

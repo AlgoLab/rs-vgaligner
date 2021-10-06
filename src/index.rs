@@ -262,12 +262,14 @@ impl Index {
 
         let hash = generate_hash(&seq.to_string());
 
-        match self.sampling_rate.is_some() && hash % self.sampling_rate.unwrap() != 0 {
-            true => Err("Invalid kmer hash"),
-            false => match self.bhpf.get(&hash) {
-                Some(value) => Ok(*value as usize),
-                _ => Err("Kmer not in index"),
+        match self.sampling_rate.is_none()
+            || (self.sampling_rate.is_some() && hash % self.sampling_rate.unwrap() == 0)
+        {
+            true => match self.kmer_pos_ref.contains(&hash) {
+                true => Ok(*self.bhpf.get(&hash).unwrap() as usize),
+                false => Err("Kmer not in index"),
             },
+            false => Err("Hash not in sampling rate"),
         }
     }
 

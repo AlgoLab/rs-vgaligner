@@ -10,10 +10,15 @@ use crate::chain::Chain;
 use crate::index::Index;
 
 /// Get all the alignments from the [query_chains], but only return the best one.
-pub fn best_alignment_for_query(index: &Index, query_chains: &Vec<Chain>) -> GAFAlignment {
+pub fn best_alignment_for_query(
+    index: &Index,
+    query_chains: &Vec<Chain>,
+    align_best_n: u64,
+) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .par_iter()
+        .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| obtain_base_level_alignment(index, chain))
         .collect();
     alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
@@ -129,8 +134,8 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         .into_par_iter()
         .chain(end_handles.into_par_iter())
         .collect();
-    let mut min_handle: Handle = *all_handles.par_iter().min().unwrap();
-    let mut max_handle: Handle = *all_handles.par_iter().max().unwrap();
+    let min_handle: Handle = *all_handles.par_iter().min().unwrap();
+    let max_handle: Handle = *all_handles.par_iter().max().unwrap();
 
     /*
     println!(
