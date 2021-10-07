@@ -108,7 +108,11 @@ pub fn map_reads(
 
         let chains_gaf: Vec<GAFAlignment> = chains
             .par_iter()
-            .flat_map(|query_chains| query_chains.par_iter().map(|c| GAFAlignment::from_chain(c)))
+            .flat_map(|query_chains| {
+                query_chains
+                    .par_iter()
+                    .map(|c| GAFAlignment::from_chain(c, index))
+            })
             .collect();
 
         if let Some(prefix) = out_prefix {

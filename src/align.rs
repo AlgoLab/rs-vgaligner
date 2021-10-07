@@ -276,7 +276,14 @@ pub(crate) fn find_nodes_edges_for_abpoa(
         })
         .collect();
 
-    (seqs, edges)
+    // Remove eventual loops
+    // Since nodes are ordered, it should be enough to keep only
+    // the edges where the start nodes has a lower id than
+    // the end node
+    let edges_without_loops: Vec<(usize, usize)> =
+        edges.into_iter().filter(|edge| edge.0 < edge.1).collect();
+
+    (seqs, edges_without_loops)
 }
 
 /*
@@ -316,14 +323,28 @@ pub struct GAFAlignment {
     notes: String,
 }
 impl GAFAlignment {
-    pub(crate) fn from_chain(chain: &Chain) -> Self {
+    pub(crate) fn from_chain(chain: &Chain, index: &Index) -> Self {
+        // Find first and last node, and output it in the path matching
+        let first_chain_handle =
+            index.handle_from_seqpos(&chain.anchors.front().unwrap().target_begin);
+        let last_chain_handle = index.handle_from_seqpos(&chain.anchors.back().unwrap().target_end);
+
+        let first_node_str: String = match first_chain_handle.is_reverse() {
+            false => ">".to_string() + u64::from(first_chain_handle.id()).to_string().as_str(),
+            true => "<".to_string() + u64::from(first_chain_handle.id()).to_string().as_str(),
+        };
+        let last_node_str: String = match last_chain_handle.is_reverse() {
+            false => ">".to_string() + u64::from(last_chain_handle.id()).to_string().as_str(),
+            true => "<".to_string() + u64::from(last_chain_handle.id()).to_string().as_str(),
+        };
+
         GAFAlignment {
             query_name: chain.query.name.clone(),
             query_length: chain.query.seq.len() as u64,
             query_start: chain.anchors.front().unwrap().query_begin,
             query_end: chain.anchors.back().unwrap().query_end,
             strand: '+',
-            path_matching: " ".to_string(),
+            path_matching: first_node_str + last_node_str.as_str(),
             path_length: 0,
             path_start: 0,
             path_end: 0,
