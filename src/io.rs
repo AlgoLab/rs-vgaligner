@@ -70,9 +70,36 @@ pub fn read_seqs_from_file(filename: &str) -> Result<Vec<QuerySequence>> {
 
     // Then parse the file itself
     if file_type == InputFileTypes::Fasta {
+        /*
         while let (Some(Ok(name_long)), Some(Ok(seq))) = (lines.next(), lines.next()) {
             let name: String = String::from(name_long.substring(1, name_long.len()));
             seqs.push(QuerySequence { name, seq });
+        }
+         */
+        let mut last_fasta_name = String::new();
+        let mut fasta_same_name_count: i32 = 0;
+        let mut last_fasta_seq = String::new();
+        while let Some(Ok(line)) = lines.next() {
+            if line.starts_with('>') {
+                last_fasta_name = String::from(line.substring(1, line.len()));
+                fasta_same_name_count = 0;
+            } else {
+                if line != "" {
+                    last_fasta_seq = line;
+                    match fasta_same_name_count == 0 {
+                        true => seqs.push(QuerySequence {
+                            name: last_fasta_name.clone(),
+                            seq: last_fasta_seq,
+                        }),
+                        false => seqs.push(QuerySequence {
+                            name: last_fasta_name.clone()
+                                + fasta_same_name_count.to_string().as_str(),
+                            seq: last_fasta_seq,
+                        }),
+                    }
+                    fasta_same_name_count += 1;
+                }
+            }
         }
     } else if file_type == InputFileTypes::Fastq {
         while let (Some(Ok(name)), Some(Ok(seq)), Some(Ok(_)), Some(Ok(_))) =
@@ -120,6 +147,7 @@ mod test {
     #[test]
     fn test_read_fasta_single_read() {
         let test_seqs = read_seqs_from_file("./test/single-read-test.fa").unwrap();
+        println!("Test seqs: {:#?}", test_seqs);
         assert_eq!(test_seqs.len(), 1);
         assert_eq!(test_seqs.get(0).unwrap().name, "seq0".to_string());
         assert_eq!(

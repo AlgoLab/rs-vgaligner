@@ -327,19 +327,35 @@ pub struct GAFAlignment {
 }
 impl GAFAlignment {
     pub(crate) fn from_chain(chain: &Chain, index: &Index) -> Self {
-        // Find first and last node, and output it in the path matching
-        let first_chain_handle =
-            index.handle_from_seqpos(&chain.anchors.front().unwrap().target_begin);
-        let last_chain_handle = index.handle_from_seqpos(&chain.anchors.back().unwrap().target_end);
+        // Create a path matching (list of oriented nodes) for the chain.
+        // Since we don't have an actual path on the graph, we just take
+        // the nodes where the anchors are.
+        let chain_path_matching: Vec<String> = chain
+            .anchors
+            .par_iter()
+            .map(|anchor| {
+                // Find first and last node, and output it in the path matching
+                let first_handle = index.handle_from_seqpos(&anchor.target_begin);
+                let last_handle = index.handle_from_seqpos(&anchor.target_end);
 
-        let first_node_str: String = match first_chain_handle.is_reverse() {
-            false => ">".to_string() + u64::from(first_chain_handle.id()).to_string().as_str(),
-            true => "<".to_string() + u64::from(first_chain_handle.id()).to_string().as_str(),
-        };
-        let last_node_str: String = match last_chain_handle.is_reverse() {
-            false => ">".to_string() + u64::from(last_chain_handle.id()).to_string().as_str(),
-            true => "<".to_string() + u64::from(last_chain_handle.id()).to_string().as_str(),
-        };
+                // Add the orientation
+                let first_node_str: String = match first_handle.is_reverse() {
+                    false => ">".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                    true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                };
+                let last_node_str: String = match last_handle.is_reverse() {
+                    false => ">".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                    true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                };
+
+                // If both ends of the anchor are on the same node, return it
+                // only once
+                match first_node_str.eq(&last_node_str) {
+                    false => first_node_str + last_node_str.as_str(),
+                    true => first_node_str,
+                }
+            })
+            .collect();
 
         GAFAlignment {
             query_name: chain.query.name.clone(),
@@ -347,7 +363,7 @@ impl GAFAlignment {
             query_start: chain.anchors.front().unwrap().query_begin,
             query_end: chain.anchors.back().unwrap().query_end,
             strand: '+',
-            path_matching: first_node_str + last_node_str.as_str(),
+            path_matching: chain_path_matching.join(","),
             path_length: 0,
             path_start: 0,
             path_end: 0,
