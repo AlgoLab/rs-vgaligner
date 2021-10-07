@@ -280,8 +280,11 @@ pub(crate) fn find_nodes_edges_for_abpoa(
     // Since nodes are ordered, it should be enough to keep only
     // the edges where the start nodes has a lower id than
     // the end node
-    let edges_without_loops: Vec<(usize, usize)> =
-        edges.into_iter().filter(|edge| edge.0 < edge.1).collect();
+    let edges_without_loops: Vec<(usize, usize)> = match po_range.orient {
+        RangeOrient::Forward => edges.into_iter().filter(|edge| edge.0 < edge.1).collect(),
+        RangeOrient::Reverse => edges.into_iter().filter(|edge| edge.1 < edge.0).collect(),
+        RangeOrient::Both => edges,
+    };
 
     (seqs, edges_without_loops)
 }
