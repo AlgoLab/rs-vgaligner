@@ -233,10 +233,21 @@ impl Index {
 
         // Store the index in the .idx file
         if let Some(out_prefix) = out_prefix {
-            match index.store_with_prefix(out_prefix.to_string()) {
-                Err(e) => panic!("{}", e),
-                _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
+            match out_prefix.ends_with(".idx") {
+                false => {
+                    match index.store_with_prefix(out_prefix.to_string()) {
+                        Err(e) => panic!("{}", e),
+                        _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
+                    }
+                }
+                true => {
+                    match index.store_in_file(out_prefix.to_string()) {
+                        Err(e) => panic!("{}", e),
+                        _ => println!("Index correctly stored in {}!", out_prefix.to_string()),
+                    }
+                }
             }
+
         }
 
         index
@@ -248,8 +259,21 @@ impl Index {
         Ok(())
     }
 
-    pub fn load_from_file(out_prefix: String) -> Self {
-        let index: Index = deserialize_object_from_file(out_prefix.to_string());
+    /// Store the index in a file [out_file]
+    fn store_in_file(&self, out_file: String) -> std::io::Result<()> {
+        serialize_object_to_file(&self, out_file.clone())?;
+        Ok(())
+    }
+
+    /// Load the index in a location with prefix [out_prefix]
+    pub fn load_from_prefix(out_prefix: String) -> Self {
+        let index: Index = deserialize_object_from_file(out_prefix.to_string()+".idx");
+        index
+    }
+
+    /// Load the index from a file [out_file]
+    pub fn load_from_file(out_file: String) -> Self {
+        let index: Index = deserialize_object_from_file(out_file.to_string());
         index
     }
 
