@@ -116,12 +116,14 @@ pub fn map_reads(
             .collect();
 
         if let Some(prefix) = out_prefix {
-            match write_gaf_to_file(&chains_gaf, prefix.clone().to_string() + "-chains" + ".gaf") {
+            let file_name = match prefix.ends_with(".gaf") {
+                true => prefix.to_string(),
+                false => prefix.clone().to_string() + "-chains" + ".gaf",
+            };
+
+            match write_gaf_to_file(&chains_gaf, file_name.to_string()) {
                 Err(e) => panic!("{}", e),
-                _ => println!(
-                    "Chains stored correctly in {}-chains.gaf!",
-                    prefix.clone().to_string()
-                ),
+                _ => println!("Chains stored correctly in {}!", file_name),
             }
         }
 
@@ -144,15 +146,14 @@ pub fn map_reads(
         } else {
             println!("Found {} alignments!", alignments.len());
             if let Some(prefix) = out_prefix {
-                match write_gaf_to_file(
-                    &alignments,
-                    prefix.clone().to_string() + "-alignments" + ".gaf",
-                ) {
+                let file_name = match prefix.ends_with(".gaf") {
+                    true => prefix.to_string(),
+                    false => prefix.clone().to_string() + "-alignments" + ".gaf",
+                };
+
+                match write_gaf_to_file(&alignments, file_name.to_string()) {
                     Err(e) => panic!("{}", e),
-                    _ => println!(
-                        "Alignments stored correctly in {}-alignments.gaf!",
-                        prefix.clone().to_string()
-                    ),
+                    _ => println!("Alignments stored correctly in {}!", file_name),
                 }
             }
 

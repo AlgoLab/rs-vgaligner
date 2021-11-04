@@ -49,7 +49,7 @@ subcommands:
             required: false
             takes_value: true
         - n-threads:
-            short: n
+            short: t
             long: threads
             value_name: INTEGER
             help: Number of threads to be used (defaults to all available)
@@ -127,7 +127,7 @@ subcommands:
                 required: false
                 takes_value: false
             - n-threads:
-                short: n
+                short: t
                 long: threads
                 value_name: INTEGER
                 help: Number of threads to be used (defaults to all available)

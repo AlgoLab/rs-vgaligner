@@ -234,20 +234,15 @@ impl Index {
         // Store the index in the .idx file
         if let Some(out_prefix) = out_prefix {
             match out_prefix.ends_with(".idx") {
-                false => {
-                    match index.store_with_prefix(out_prefix.to_string()) {
-                        Err(e) => panic!("{}", e),
-                        _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
-                    }
-                }
-                true => {
-                    match index.store_in_file(out_prefix.to_string()) {
-                        Err(e) => panic!("{}", e),
-                        _ => println!("Index correctly stored in {}!", out_prefix.to_string()),
-                    }
-                }
+                false => match index.store_with_prefix(out_prefix.to_string()) {
+                    Err(e) => panic!("{}", e),
+                    _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
+                },
+                true => match index.store_in_file(out_prefix.to_string()) {
+                    Err(e) => panic!("{}", e),
+                    _ => println!("Index correctly stored in {}!", out_prefix.to_string()),
+                },
             }
-
         }
 
         index
@@ -267,7 +262,7 @@ impl Index {
 
     /// Load the index in a location with prefix [out_prefix]
     pub fn load_from_prefix(out_prefix: String) -> Self {
-        let index: Index = deserialize_object_from_file(out_prefix.to_string()+".idx");
+        let index: Index = deserialize_object_from_file(out_prefix.to_string() + ".idx");
         index
     }
 
