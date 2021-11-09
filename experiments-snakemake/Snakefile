@@ -1,0 +1,151 @@
+configfile: "config.yaml"
+
+datasets = config["datasets"].split(",")
+nreads = config["nreads"]
+kmersize = config["kmersize"]
+
+rule all:
+    input:
+        expand("{dataset}/comparison_vgaligner.txt", dataset=datasets),
+        expand("{dataset}/comparison_vg.txt", dataset=datasets),
+        expand("{dataset}/comparison_graphaligner.txt", dataset=datasets)
+
+##### Sort the graph #####
+rule odgi_sort:
+    input:
+        "{dataset}/graph.gfa"
+    output:
+        "{dataset}/sorted_graph.gfa"
+    threads: 8
+    shell:
+        "odgi sort -i {input} -o - -p Ygs -P -t {threads} | odgi view -i - -g -t {threads} > {output}"
+
+
+##### Obtain the input reads and reference alignment #####
+rule vg_sim:
+    input:
+        "{dataset}/sorted_graph.gfa",
+    output:
+        truth="{dataset}/sim.gam",
+        reads="{dataset}/reads.fa"
+    shell:
+        "vg sim -x {input} -n {nreads} -s 77 -a | tee {output.truth} | vg view -aj - | jq -r '[.name, .sequence] | @tsv' | awk '{{ print \">\"$1\"\\n\"$2; }}' > {output.reads}"
+
+rule vg_sim_gam_to_gaf:
+    input:
+        gam="{dataset}/sim.gam",
+        graph="{dataset}/sorted_graph.gfa"
+    output:
+        "{dataset}/sim.gaf"
+    shell:
+        "vg convert --gam-to-gaf {input.gam} {input.graph} > {output}"
+
+
+##### Run vgaligner #####
+rule vgaligner_index:
+    input:
+        "{dataset}/sorted_graph.gfa"
+    output:
+        "{dataset}/sorted_graph.idx"
+    benchmark:
+        "{dataset}/benchmarks/index.txt"
+    threads: 8
+    shell:
+        "vgaligner index -i {input} -k {kmersize} -t {threads} -o {output}"
+
+rule vgaligner_map:
+    input:
+        index="{dataset}/sorted_graph.idx",
+        reads="{dataset}/reads.fa"
+    output:
+        "{dataset}/result_vgaligner.gaf"
+    benchmark:
+        "{dataset}/benchmarks/map.txt"
+    threads: 8
+    shell:
+        "vgaligner map -i {input.index} -f {input.reads} --also-align -t {threads} -o {output}"
+
+##### Run VG #####
+rule vg_view_gfa_to_vg:
+    input:
+        "{dataset}/sorted_graph.gfa"
+    output:
+        "{dataset}/sorted_graph.vg"
+    shell:
+        "vg view -F {input} -v > {output}"
+
+rule vg_index:
+    input: 
+        "{dataset}/sorted_graph.vg"
+    output:
+        xg="{dataset}/sorted_graph.xg",
+        gcsa="{dataset}/sorted_graph.gcsa"
+    benchmark:
+        "{dataset}/benchmarks/vgindex.txt"
+    threads: 8
+    shell:
+        "vg index {input} -x {output.xg} -g {output.gcsa} -k {kmersize} -t {threads}"
+
+rule vg_map:
+    input:
+        "{dataset}/sorted_graph.xg",
+        "{dataset}/sorted_graph.gcsa",
+        #"{dataset}/sorted_graph.gcsa.lcp",
+        reads="{dataset}/reads.fa"
+    output:
+        "{dataset}/result_vg.gam"
+    benchmark:
+        "{dataset}/benchmarks/vgindex.txt"
+    threads: 8
+    shell:
+        "vg map -d {wildcards.dataset}/sorted_graph -f {input.reads} -t {threads} > {output}"
+
+rule vg_map_convert:
+    input: 
+        gam="{dataset}/result_vg.gam",
+        graph="{dataset}/sorted_graph.gfa"
+    output:
+        "{dataset}/result_vg.gaf"
+    shell:
+        "vg convert --gam-to-gaf {input.gam} {input.graph} > {output}"
+
+##### Run graphaligner #####
+rule graphaligner:
+    input:
+        graph="{dataset}/sorted_graph.gfa",
+        reads="{dataset}/reads.fa"
+    output:
+        "{dataset}/result_graphaligner.gaf"
+    benchmark:
+        "{dataset}/benchmarks/graphaligner.txt"
+    threads: 8
+    shell:
+        "touch {output} && GraphAligner -g {input.graph} -f {input.reads} -a {output} -x vg -t {threads}"
+
+##### Run comparison scripts #####
+rule gafcompare_vg:
+    input:
+        ref="{dataset}/sim.gaf",
+        vgres="{dataset}/result_vg.gaf"
+    output:
+        "{dataset}/comparison_vg.txt"
+    shell:
+        "python3 gafcompareVG.py {input.vgres} {input.ref} > {output}"
+
+rule gafcompare_vgaligner:
+    input:
+        ref="{dataset}/sim.gaf",
+        vgalignerres="{dataset}/result_vgaligner.gaf"
+    output:
+        "{dataset}/comparison_vgaligner.txt"
+    shell:
+        "python3 gafcompare.py {input.vgalignerres} {input.ref} > {output}"
+
+rule gafcompare_graphaligner:
+    input:
+        ref="{dataset}/sim.gaf",
+        graphalignerres="{dataset}/result_graphaligner.gaf"
+    output:
+        "{dataset}/comparison_graphaligner.txt"
+    shell:
+        "python3 gafcompareGraphaligner.py {input.graphalignerres} {input.ref} > {output}"

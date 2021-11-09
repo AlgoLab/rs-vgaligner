@@ -1,0 +1,3 @@
+datasets: 1-simple,2-DRB1-3123,3-E3133,4-A3105,5-B3106,6-DRB5-3127,7-MICB-4277,8-C3107,9-G-3135,10-F-3134,11-C-3107-spoa,12-DMA-3108-spoa,13-V-352962-spoa,14-DOB-3112-spoa,15-H-3136-spoa,16-DQB1-3119-spoa,17-DRB1-3123-smooth,19-MICB-4227-smooth,20-C3107-smooth
+nreads: 1
+kmersize: 11

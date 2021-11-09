@@ -1,0 +1,4 @@
+Building DAG of jobs...
+MissingInputException in line 14 of /home/hopedwall/Desktop/tesi/rs-vgaligner/experiments-snakemake/Snakefile:
+Missing input files for rule odgi_sort:
+11-C-3107/graph.gfa
