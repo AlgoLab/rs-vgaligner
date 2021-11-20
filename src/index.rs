@@ -21,6 +21,9 @@ use crate::serialization::{deserialize_object_from_file, serialize_object_to_fil
 use crate::serialization::{handle_vec_deser, handle_vec_ser};
 use crate::utils::{find_forward_sequence, find_graph_seq_length, NodeRef};
 
+use log::{info, warn};
+use std::time::{Duration, Instant};
+
 /// Represents an index over the k-mers (with k chosen as input) contained in a Handlegraph.
 /// This index is essentially comprised of:
 /// - forward and reverse linearizations of the graph
@@ -137,12 +140,17 @@ impl Index {
         // Generate the kmers from the graph, and obtain graph-based positions.
         // Note that the resulting kmers will be already sorted according to their seq
         // and deduplicated.
+        let start_generate_kmers = Instant::now();
         let kmers_on_graph: Vec<GraphKmer> = generate_kmers_parallel(
             graph,
             kmer_length as u64,
             Some(max_furcations),
             Some(max_degree),
             sampling_rate,
+        );
+        info!(
+            "Finding the kmers required: {} ms",
+            start_generate_kmers.elapsed().as_millis()
         );
 
         /*
@@ -182,6 +190,8 @@ impl Index {
         // in the list of kmer positions
         let mut kmers_hashes: Vec<u64> = Vec::new();
         let mut kmers_start_offsets: Vec<u64> = Vec::new();
+
+        let start_convert_kmers = Instant::now();
         let kmers_pos_on_ref: Vec<KmerPos> = generate_pos_on_ref_2(
             &graph,
             &kmers_on_graph,
@@ -189,6 +199,10 @@ impl Index {
             &node_ref,
             &mut kmers_hashes,
             &mut kmers_start_offsets,
+        );
+        info!(
+            "Converting the kmers required: {} ms",
+            start_convert_kmers.elapsed().as_millis()
         );
 
         assert_eq!(kmers_hashes.len(), kmers_start_offsets.len());
@@ -225,8 +239,8 @@ impl Index {
             loaded: false,
         };
 
-        println!("Index with k={} built correctly!", index.kmer_length);
-        println!(
+        info!("Index with k={} built correctly!", index.kmer_length);
+        info!(
             "Found {} different kmers, which appear in {} positions!",
             index.n_kmers, index.n_kmer_pos
         );
@@ -236,11 +250,11 @@ impl Index {
             match out_prefix.ends_with(".idx") {
                 false => match index.store_with_prefix(out_prefix.to_string()) {
                     Err(e) => panic!("{}", e),
-                    _ => println!("Index correctly stored in {}.idx!", out_prefix.to_string()),
+                    _ => info!("Index correctly stored in {}.idx!", out_prefix.to_string()),
                 },
                 true => match index.store_in_file(out_prefix.to_string()) {
                     Err(e) => panic!("{}", e),
-                    _ => println!("Index correctly stored in {}!", out_prefix.to_string()),
+                    _ => info!("Index correctly stored in {}!", out_prefix.to_string()),
                 },
             }
         }

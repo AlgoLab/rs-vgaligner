@@ -9,6 +9,10 @@ use rayon::prelude::*;
 use crate::chain::Chain;
 use crate::index::Index;
 
+use log::{info, warn};
+use std::env;
+use std::time::Instant;
+
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
     index: &Index,
@@ -29,11 +33,22 @@ pub fn best_alignment_for_query(
 /// Get the POA alignment starting from a [chain].
 pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
+
+    let start_range = Instant::now();
     let po_range = find_range_chain(index, chain);
+    info!(
+        "Finding the PO range took: {} ms",
+        start_range.elapsed().as_millis()
+    );
     //println!("Graph range: {:#?}", po_range);
 
     // Find nodes and edges
+    let start_find_graph = Instant::now();
     let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
+    info!(
+        "Finding nodes and edges took: {} ms",
+        start_find_graph.elapsed().as_millis()
+    );
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
@@ -60,8 +75,14 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     let result: AbpoaAlignmentResult;
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
+        let start_alignment = Instant::now();
         result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
+        info!(
+            "Performing the alignment took: {} ms",
+            start_alignment.elapsed().as_millis()
+        );
     }
+    let start_GAF = Instant::now();
     let alignment: GAFAlignment = generate_alignment(
         index,
         chain,
@@ -70,6 +91,10 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         //&subquery_range,
         &(0 as u64..chain.query.seq.len() as u64),
         chain.query.seq.len(),
+    );
+    info!(
+        "Generating the GAF took: {} ms",
+        start_GAF.elapsed().as_millis()
     );
 
     alignment

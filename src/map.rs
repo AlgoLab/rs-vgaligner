@@ -9,6 +9,9 @@ use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
+use log::{info, warn};
+use std::time::{Duration, Instant};
+
 /// Map the [input] reads against the [index], in order to obtain Chains
 /// (and eventually POA Alignments is [also_align]), which can be printed to console
 /// with [out-console] or store the in a file with prefix [out_prefix].
@@ -30,8 +33,9 @@ pub fn map_reads(
     also_align: bool,
     align_best_n: u64,
 ) {
-    println!("Found {} reads!", inputs.len());
+    info!("Found {} reads!", inputs.len());
 
+    let start_chaining = Instant::now();
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
         .into_par_iter()
@@ -95,13 +99,14 @@ pub fn map_reads(
             }
         })
         .collect();
+    info!("Chaining took: {} ms", start_chaining.elapsed().as_millis());
 
     // Store chains as GAF Strings, and store them to a output GAF file,
     // and optionally to console
     if chains.is_empty() {
-        println!("No chain found!");
+        info!("No chain found!");
     } else {
-        println!(
+        info!(
             "Found {} chains!",
             chains.par_iter().map(|x| x.len()).sum::<usize>()
         );
@@ -123,28 +128,33 @@ pub fn map_reads(
 
             match write_gaf_to_file(&chains_gaf, file_name.to_string()) {
                 Err(e) => panic!("{}", e),
-                _ => println!("Chains stored correctly in {}!", file_name),
+                _ => info!("Chains stored correctly in {}!", file_name),
             }
         }
 
         if write_console {
             for gaf_str in chains_gaf {
-                println!("{:#?}", gaf_str);
+                info!("{:#?}", gaf_str);
             }
         }
     }
 
     // Perform the alignment with rs-abPOA, using the chains as a reference
     if also_align {
+        let start_alignment = Instant::now();
         let alignments: Vec<GAFAlignment> = chains
             .par_iter()
             .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n))
             .collect();
+        info!(
+            "Alignment took: {} ms",
+            start_alignment.elapsed().as_millis()
+        );
 
         if alignments.is_empty() {
-            println!("No alignment found!");
+            info!("No alignment found!");
         } else {
-            println!("Found {} alignments!", alignments.len());
+            info!("Found {} alignments!", alignments.len());
             if let Some(prefix) = out_prefix {
                 let file_name = match prefix.ends_with(".gaf") {
                     true => prefix.to_string(),
@@ -153,7 +163,7 @@ pub fn map_reads(
 
                 match write_gaf_to_file(&alignments, file_name.to_string()) {
                     Err(e) => panic!("{}", e),
-                    _ => println!("Alignments stored correctly in {}!", file_name),
+                    _ => info!("Alignments stored correctly in {}!", file_name),
                 }
             }
 

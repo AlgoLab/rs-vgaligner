@@ -4,6 +4,9 @@ use crate::index::Index;
 use crate::io::read_seqs_from_file;
 use crate::map::map_reads;
 
+use std::env;
+use log::{info, warn};
+
 pub fn map_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();
 
@@ -61,9 +64,18 @@ pub fn map_main(global_matches : &ArgMatches) {
         .parse::<usize>()
         .unwrap();
 
+    // Initialize the RUST_LOG env variable for logging.
+    // Note: the log.features attribute in Cargo.toml defines what kind of events
+    // to show or hide in debug/release mode.
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info")
+    }
+    env_logger::init();
+    info!("Start logging");
+
     // Create threadpool with the number of threads specified by the user
     match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
-        Ok(_) => println!("Mapping reads to Index using {} threads!", rayon::current_num_threads()),
+        Ok(_) => info!("Mapping reads to Index using {} threads!", rayon::current_num_threads()),
         Err(e) => panic!("{}",e)
     };
 

@@ -5,6 +5,8 @@ use gfa::{gfa::GFA, parser::GFAParser};
 use handlegraph::hashgraph::HashGraph;
 
 use crate::index::Index;
+use std::env;
+use log::{info, warn};
 
 pub fn index_main(global_matches : &ArgMatches) {
     let matches = global_matches.subcommand_matches("index").unwrap();
@@ -47,9 +49,18 @@ pub fn index_main(global_matches : &ArgMatches) {
         .parse::<usize>()
         .unwrap();
 
+    // Initialize the RUST_LOG env variable for logging.
+    // Note: the log.features attribute in Cargo.toml defines what kind of events
+    // to show or hide in debug/release mode.
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info")
+    }
+    env_logger::init();
+    info!("Start logging");
+
     // Create threadpool with the number of threads specified by the user
     match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
-        Ok(_) => println!("Building index using {} threads!", rayon::current_num_threads()),
+        Ok(_) => info!("Building index using {} threads!", rayon::current_num_threads()),
         Err(e) => panic!("{}",e)
     };
 
