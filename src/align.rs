@@ -75,12 +75,14 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     let result: AbpoaAlignmentResult;
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
-        let start_alignment = Instant::now();
+        //let start_alignment = Instant::now();
         result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
+        /*
         info!(
             "Performing the alignment took: {} ms",
             start_alignment.elapsed().as_millis()
         );
+         */
     }
     let start_GAF = Instant::now();
     let alignment: GAFAlignment = generate_alignment(
@@ -466,8 +468,21 @@ pub(crate) unsafe fn align_with_poa(
     query: &str,
 ) -> AbpoaAlignmentResult {
     let mut aligner = AbpoaAligner::new_with_example_params();
+
+    let start_abPOA_build = Instant::now();
     aligner.add_nodes_edges(nodes, edges);
+    info!(
+        "Building the abPOA graph took: {} ms",
+        start_abPOA_build.elapsed().as_millis()
+    );
+
+    let start_abPOA_alignment = Instant::now();
     let res = aligner.align_sequence(query);
+    info!(
+        "Alignment with abPOA took: {} ms",
+        start_abPOA_alignment.elapsed().as_millis()
+    );
+
     res
 }
 
