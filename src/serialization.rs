@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 
 use handlegraph::handle::Handle;
+use json::JsonValue;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use serde::de::DeserializeOwned;
@@ -54,4 +55,13 @@ where
 {
     let reader = BufReader::new(File::open(file_name).unwrap());
     bincode::deserialize_from(reader).unwrap()
+}
+
+/// Store path-to-sequence mappings is a JSON file
+pub fn store_mappings_in_file(object: &String, file_name: String) -> std::io::Result<()> {
+    let mut file =
+        File::create(&file_name).unwrap_or_else(|_| panic!("Couldn't create file {}", &file_name));
+    file.write_all(object.as_str().as_ref())
+        .unwrap_or_else(|_| panic!("Couldn't write to file {}", &file_name));
+    Ok(())
 }

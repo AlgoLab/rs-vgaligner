@@ -48,6 +48,12 @@ subcommands:
             help: build a modimizer index by keeping kmers whose hash % sampling-rate == 0 (defaults to NOT using the modimizer)
             required: false
             takes_value: true
+        - generate-mappings:
+              short: g
+              long: generate-mappings
+              help: generate paths-to-sequences mappings (only used for debugging/validation)
+              required: false
+              takes_value: false
         - n-threads:
             short: t
             long: threads
