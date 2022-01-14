@@ -61,6 +61,13 @@ impl QuerySequence {
             seq: seq.to_string().clone(),
         }
     }
+
+    pub fn from_name_and_string(name: &str, seq: &str) -> Self {
+        QuerySequence {
+            name: name.to_string().clone(),
+            seq: seq.to_string().clone(),
+        }
+    }
 }
 
 /// Parse a fasta/fastq file and returns the list of sequences from the given file

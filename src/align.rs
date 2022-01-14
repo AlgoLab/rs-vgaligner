@@ -23,7 +23,10 @@ pub fn best_alignment_for_query(
     let mut alignments: Vec<GAFAlignment> = query_chains
         .par_iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
-        .map(|chain| obtain_base_level_alignment(index, chain))
+        .map(|chain| match chain.is_placeholder {
+            false => obtain_base_level_alignment(index, chain),
+            true => GAFAlignment::from_placeholder_chain(chain),
+        })
         .collect();
     alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
     //println!("Alignments: {:#?}", alignments);
@@ -332,28 +335,29 @@ pub(crate) fn find_nodes_edges_for_abpoa(
     10      int     Number of residue matches
     11      int     Alignment block length
     12      int     Mapping quality (0-255; 255 for missing)
-
     NOTE: There can also be additional notes at the end.
 */
 /// Represents an alignment in GAF format.
 #[derive(Debug, Clone)]
 pub struct GAFAlignment {
-    query_name: String,
-    query_length: u64,
-    query_start: u64,
-    query_end: u64,
-    strand: char,
-    path_matching: String,
-    path_length: u64,
-    path_start: u64,
-    path_end: u64,
-    residue: u64,
-    alignment_block_length: u64,
-    mapping_quality: u64,
-    notes: String,
+    query_name: Option<String>,
+    query_length: Option<u64>,
+    query_start: Option<u64>,
+    query_end: Option<u64>,
+    strand: Option<char>,
+    path_matching: Option<String>,
+    path_length: Option<u64>,
+    path_start: Option<u64>,
+    path_end: Option<u64>,
+    residue: Option<u64>,
+    alignment_block_length: Option<u64>,
+    mapping_quality: Option<u64>,
+    notes: Option<String>,
 }
 impl GAFAlignment {
     pub(crate) fn from_chain(chain: &Chain, index: &Index) -> Self {
+        assert_eq!(chain.is_placeholder, false);
+
         // Create a path matching (list of oriented nodes) for the chain.
         // Since we don't have an actual path on the graph, we just take
         // the nodes where the anchors are.
@@ -385,38 +389,96 @@ impl GAFAlignment {
             .collect();
 
         GAFAlignment {
-            query_name: chain.query.name.clone(),
-            query_length: chain.query.seq.len() as u64,
-            query_start: chain.anchors.front().unwrap().query_begin,
-            query_end: chain.anchors.back().unwrap().query_end,
-            strand: '+',
-            path_matching: chain_path_matching.join(","),
-            path_length: 0,
-            path_start: 0,
-            path_end: 0,
-            residue: 0,
-            alignment_block_length: 0,
-            mapping_quality: cmp::min(chain.mapping_quality as u64, 254_u64),
-            notes: "ta:Z:chain".to_string(),
+            query_name: Some(chain.query.name.clone()),
+            query_length: Some(chain.query.seq.len() as u64),
+            query_start: Some(chain.anchors.front().unwrap().query_begin),
+            query_end: Some(chain.anchors.back().unwrap().query_end),
+            strand: Some('+'),
+            path_matching: Some(chain_path_matching.join(",")),
+            path_length: Some(0),
+            path_start: Some(0),
+            path_end: Some(0),
+            residue: Some(0),
+            alignment_block_length: Some(0),
+            mapping_quality: Some(cmp::min(chain.mapping_quality as u64, 254_u64)),
+            notes: Some("ta:Z:chain".to_string()),
+        }
+    }
+
+    pub(crate) fn from_placeholder_chain(chain: &Chain) -> Self {
+        assert_eq!(chain.is_placeholder, true);
+        GAFAlignment {
+            query_name: Some(chain.query.name.clone()),
+            query_length: Some(chain.query.seq.len() as u64),
+            query_start: None,
+            query_end: None,
+            strand: None,
+            path_matching: None,
+            path_length: None,
+            path_start: None,
+            path_end: None,
+            residue: None,
+            alignment_block_length: None,
+            mapping_quality: Some(0),
+            notes: None,
         }
     }
 
     pub fn to_string(&self) -> String {
         format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            self.query_name,
-            self.query_length,
-            self.query_start,
-            self.query_end,
-            self.strand,
-            self.path_matching,
-            self.path_length,
-            self.path_start,
-            self.path_end,
-            self.residue,
-            self.alignment_block_length,
-            self.mapping_quality,
-            self.notes
+            match &self.query_name {
+                Some(x) => x.as_str(),
+                _ => &"*",
+            },
+            match &self.query_length {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.query_start {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.query_end {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.strand {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.path_matching {
+                Some(x) => x.as_str(),
+                _ => &"*",
+            },
+            match &self.path_length {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.path_start {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.path_end {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.residue {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.alignment_block_length {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.mapping_quality {
+                Some(x) => x.to_string(),
+                _ => String::from("*"),
+            },
+            match &self.notes {
+                Some(x) => x.as_str(),
+                _ => &"*",
+            }
         )
     }
 }
@@ -537,25 +599,55 @@ pub(crate) fn generate_alignment(
     */
 
     GAFAlignment {
-        query_name: chain.query.name.clone(),
-        query_length: subquery_range.end - subquery_range.start,
-        query_start: subquery_range.start,
-        query_end: subquery_range.end,
-        strand: '+',
-        path_matching: alignment_path_string.iter().join(""),
-        path_length: result.abpoa_nodes.len() as u64,
-        path_start: 0,                                 //og_path_start,
-        path_end: result.abpoa_nodes.len() as u64 - 1, //og_path_end,
-        residue: 0,
-        alignment_block_length: result.n_aligned_bases as u64,
-        mapping_quality: 255, //result.best_score as u64,
-        notes: ("as:i:-30".to_string() + " " + result.cs_string.as_str()), //+ " " + "cg:Z:" + result.cigar.as_str()),
+        query_name: Some(chain.query.name.clone()),
+        query_length: Some(subquery_range.end - subquery_range.start),
+        query_start: Some(subquery_range.start),
+        query_end: Some(subquery_range.end),
+        strand: Some('+'),
+        path_matching: Some(alignment_path_string.iter().join("")),
+        path_length: Some(result.abpoa_nodes.len() as u64),
+        path_start: Some(0),                                 //og_path_start,
+        path_end: Some(result.abpoa_nodes.len() as u64 - 1), //og_path_end,
+        residue: Some(0),
+        alignment_block_length: Some(result.n_aligned_bases as u64),
+        mapping_quality: Some(255), //result.best_score as u64,
+        notes: Some("as:i:-30".to_string() + " " + result.cs_string.as_str()), //+ " " + "cg:Z:" + result.cigar.as_str()),
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::align::GAFAlignment;
+    use crate::chain::Chain;
+    use crate::io::QuerySequence;
 
     #[test]
-    fn test_find_node_edges() {}
+    fn test_to_string_placeholder() {
+        // Simulate input read
+        let read = QuerySequence::from_name_and_string("Read1", "AAACTA");
+
+        // Create placeholder chain from that read
+        let mut c = Chain::new_placeholder();
+        c.query = read.clone();
+
+        // Test that the alignment is printed out correctly
+        let alignment = GAFAlignment::from_placeholder_chain(&c);
+        let expected_string = format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            read.name,
+            read.seq.len(),
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+            0,
+            "*"
+        );
+        assert_eq!(alignment.to_string(), expected_string);
+    }
 }

@@ -39,7 +39,7 @@ pub fn map_reads(
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
         .into_par_iter()
-        .filter_map(|query| {
+        .map(|query| {
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
             let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
@@ -92,50 +92,47 @@ pub fn map_reads(
             // TODO: using the score would be better...
             seq_chains.sort_by(|a, b| a.anchors.len().cmp(&b.anchors.len()));
 
-            if !seq_chains.is_empty() {
-                Some(seq_chains)
-            } else {
-                None
-            }
+            seq_chains
         })
         .collect();
     info!("Chaining took: {} ms", start_chaining.elapsed().as_millis());
 
     // Store chains as GAF Strings, and store them to a output GAF file,
     // and optionally to console
-    if chains.is_empty() {
-        info!("No chain found!");
-    } else {
-        info!(
-            "Found {} chains!",
-            chains.par_iter().map(|x| x.len()).sum::<usize>()
-        );
+    info!(
+        "Found {} chains!",
+        chains.par_iter().map(|x| x.len()).sum::<usize>()
+    );
 
-        let chains_gaf: Vec<GAFAlignment> = chains
-            .par_iter()
-            .flat_map(|query_chains| {
-                query_chains
-                    .par_iter()
-                    .map(|c| GAFAlignment::from_chain(c, index))
-            })
-            .collect();
+    info!("Chains are: {:#?}", chains);
 
-        if let Some(prefix) = out_prefix {
-            let file_name = match prefix.ends_with(".gaf") {
-                true => prefix.to_string(),
-                false => prefix.clone().to_string() + "-chains" + ".gaf",
-            };
+    let chains_gaf: Vec<GAFAlignment> = chains
+        .par_iter()
+        .flat_map(|query_chains| {
+            query_chains.par_iter().map(|c|
+                    // TODO: overflow when creating alignment from chain
+                    match c.is_placeholder {
+                        false => GAFAlignment::from_chain(c, index),
+                        true => GAFAlignment::from_placeholder_chain(c)
+                })
+        })
+        .collect();
 
-            match write_gaf_to_file(&chains_gaf, file_name.to_string()) {
-                Err(e) => panic!("{}", e),
-                _ => info!("Chains stored correctly in {}!", file_name),
-            }
+    if let Some(prefix) = out_prefix {
+        let file_name = match prefix.ends_with(".gaf") {
+            true => prefix.to_string(),
+            false => prefix.clone().to_string() + "-chains" + ".gaf",
+        };
+
+        match write_gaf_to_file(&chains_gaf, file_name.to_string()) {
+            Err(e) => panic!("{}", e),
+            _ => info!("Chains stored correctly in {}!", file_name),
         }
+    }
 
-        if write_console {
-            for gaf_str in chains_gaf {
-                info!("{:#?}", gaf_str);
-            }
+    if write_console {
+        for gaf_str in chains_gaf {
+            info!("{:#?}", gaf_str);
         }
     }
 
@@ -151,26 +148,22 @@ pub fn map_reads(
             start_alignment.elapsed().as_millis()
         );
 
-        if alignments.is_empty() {
-            info!("No alignment found!");
-        } else {
-            info!("Found {} alignments!", alignments.len());
-            if let Some(prefix) = out_prefix {
-                let file_name = match prefix.ends_with(".gaf") {
-                    true => prefix.to_string(),
-                    false => prefix.clone().to_string() + "-alignments" + ".gaf",
-                };
+        info!("Found {} alignments!", alignments.len());
+        if let Some(prefix) = out_prefix {
+            let file_name = match prefix.ends_with(".gaf") {
+                true => prefix.to_string(),
+                false => prefix.clone().to_string() + "-alignments" + ".gaf",
+            };
 
-                match write_gaf_to_file(&alignments, file_name.to_string()) {
-                    Err(e) => panic!("{}", e),
-                    _ => info!("Alignments stored correctly in {}!", file_name),
-                }
+            match write_gaf_to_file(&alignments, file_name.to_string()) {
+                Err(e) => panic!("{}", e),
+                _ => info!("Alignments stored correctly in {}!", file_name),
             }
+        }
 
-            if write_console {
-                for gaf_str in alignments {
-                    println!("{:#?}", gaf_str);
-                }
+        if write_console {
+            for gaf_str in alignments {
+                println!("{:#?}", gaf_str);
             }
         }
     }
