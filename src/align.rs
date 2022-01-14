@@ -367,7 +367,7 @@ impl GAFAlignment {
             .map(|anchor| {
                 // Find first and last node, and output it in the path matching
                 let first_handle = index.handle_from_seqpos(&anchor.target_begin);
-                let last_handle = index.handle_from_seqpos(&anchor.target_end);
+                let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
 
                 // Add the orientation
                 let first_node_str: String = match first_handle.is_reverse() {
@@ -394,7 +394,7 @@ impl GAFAlignment {
             query_start: Some(chain.anchors.front().unwrap().query_begin),
             query_end: Some(chain.anchors.back().unwrap().query_end),
             strand: Some('+'),
-            path_matching: Some(chain_path_matching.join(",")),
+            path_matching: Some(chain_path_matching.join("")),
             path_length: Some(0),
             path_start: Some(0),
             path_end: Some(0),
