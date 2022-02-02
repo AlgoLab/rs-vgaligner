@@ -104,7 +104,7 @@ pub fn map_reads(
         chains.par_iter().map(|x| x.len()).sum::<usize>()
     );
 
-    info!("Chains are: {:#?}", chains);
+    //info!("Chains are: {:#?}", chains);
 
     let chains_gaf: Vec<GAFAlignment> = chains
         .par_iter()

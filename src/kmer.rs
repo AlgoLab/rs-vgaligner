@@ -815,7 +815,7 @@ pub fn generate_pos_on_ref(
 /// linearization (this is effectively a Kmer -> KmerPos conversion)
 pub fn generate_pos_on_ref_2(
     graph: &HashGraph,
-    kmers_on_graph: &Vec<GraphKmer>,
+    kmers_on_graph: Vec<GraphKmer>,
     seq_length: &u64,
     node_ref: &Vec<NodeRef>,
     hashes: &mut Vec<u64>,
@@ -825,6 +825,7 @@ pub fn generate_pos_on_ref_2(
     let mut last_kmer: Option<String> = None;
     let mut curr_kmer_positions: Vec<KmerPos> = Vec::new();
 
+    let final_kmer = kmers_on_graph.last().unwrap().clone();
     for kmer in kmers_on_graph {
         let first_handle_of_kmer = kmer.first_handle;
         let first_handle_seq = graph.sequence(first_handle_of_kmer).into_string_lossy();
@@ -881,7 +882,7 @@ pub fn generate_pos_on_ref_2(
             }
         };
 
-        if kmer == kmers_on_graph.last().unwrap() {
+        if kmer == final_kmer {
             let kmer_hash = generate_hash(&kmer.seq);
             hashes.push(kmer_hash);
             kmers_on_ref.push(curr_kmer_positions.clone());
