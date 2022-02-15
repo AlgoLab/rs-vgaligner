@@ -76,6 +76,10 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
 
     // Align with abpoa
     let result: AbpoaAlignmentResult;
+
+
+    //TODO: the alignment with abpoa has been removed for testing purposes, will be re-added later
+    /*
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
         //let start_alignment = Instant::now();
@@ -87,6 +91,11 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         );
          */
     }
+     */
+
+    //TODO: remove this (reported twice just to remark)
+    result = AbpoaAlignmentResult::new();
+
     let start_GAF = Instant::now();
     let alignment: GAFAlignment = generate_alignment(
         index,
