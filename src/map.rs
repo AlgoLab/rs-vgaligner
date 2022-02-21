@@ -140,7 +140,7 @@ pub fn map_reads(
     if also_align {
         let start_alignment = Instant::now();
         let alignments: Vec<GAFAlignment> = chains
-            .par_iter()
+            .iter()
             .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n))
             .collect();
         info!(

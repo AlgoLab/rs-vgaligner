@@ -21,14 +21,14 @@ pub fn best_alignment_for_query(
 ) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
-        .par_iter()
+        .iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| match chain.is_placeholder {
             false => obtain_base_level_alignment(index, chain),
             true => GAFAlignment::from_placeholder_chain(chain),
         })
         .collect();
-    alignments.par_sort_by(|a, b| b.path_length.cmp(&a.path_length));
+    alignments.sort_by(|a, b| b.path_length.cmp(&a.path_length));
     //println!("Alignments: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
@@ -53,7 +53,7 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         start_find_graph.elapsed().as_millis()
     );
     // TODO: possibly avoid this
-    let nodes_str: Vec<&str> = nodes.par_iter().map(|x| &x as &str).collect();
+    let nodes_str: Vec<&str> = nodes.iter().map(|x| &x as &str).collect();
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
     //println!("Query seq: {:#?}", chain.query.seq);
@@ -76,10 +76,6 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
 
     // Align with abpoa
     let result: AbpoaAlignmentResult;
-
-
-    //TODO: the alignment with abpoa has been removed for testing purposes, will be re-added later
-    /*
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
         //let start_alignment = Instant::now();
@@ -91,10 +87,6 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         );
          */
     }
-     */
-
-    //TODO: remove this (reported twice just to remark)
-    result = AbpoaAlignmentResult::new();
 
     let start_GAF = Instant::now();
     let alignment: GAFAlignment = generate_alignment(
@@ -158,12 +150,12 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
 
     let start_handles: Vec<Handle> = chain
         .anchors
-        .par_iter()
+        .iter()
         .map(|a| index.handle_from_seqpos(&a.target_begin))
         .collect();
     let end_handles: Vec<Handle> = chain
         .anchors
-        .par_iter()
+        .iter()
         // Here a method is called (instead of simply getting the attribute)
         // because the end position is stored as non-inclusive, but I want the
         // last included position
@@ -173,8 +165,8 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         .into_par_iter()
         .chain(end_handles.into_par_iter())
         .collect();
-    let min_handle: Handle = *all_handles.par_iter().min().unwrap();
-    let max_handle: Handle = *all_handles.par_iter().max().unwrap();
+    let min_handle: Handle = *all_handles.iter().min().unwrap();
+    let max_handle: Handle = *all_handles.iter().max().unwrap();
 
     /*
     println!(
@@ -279,7 +271,7 @@ pub(crate) fn find_nodes_edges_for_abpoa(
     // Get the seqs for the handles in the po_range
     // This is necessary because in abpoa the nodes are specified by a Vec of sequences
     let seqs: Vec<String> = range_handles
-        .par_iter()
+        .iter()
         .map(|h| index.seq_from_handle(h))
         .collect();
 
