@@ -79,13 +79,14 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     unsafe {
         //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
         //let start_alignment = Instant::now();
-        result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
+        //result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
         /*
         info!(
             "Performing the alignment took: {} ms",
             start_alignment.elapsed().as_millis()
         );
          */
+        result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str());
     }
 
     let start_GAF = Instant::now();
