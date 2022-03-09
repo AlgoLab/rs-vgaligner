@@ -3,8 +3,7 @@ use std::io::{BufReader, Write};
 
 use handlegraph::handle::Handle;
 use json::JsonValue;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
+//use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -17,7 +16,7 @@ pub(crate) struct SerializableHandle(u64);
 // Custom serializer for Index.edges (of type Vec<Handle> which does not implement Serialize)
 pub fn handle_vec_ser<S: Serializer>(vec: &Vec<Handle>, serializer: S) -> Result<S::Ok, S::Error> {
     let vec2: Vec<SerializableHandle> = vec
-        .par_iter()
+        .iter()
         .map(|h| SerializableHandle(h.as_integer()))
         .collect();
     vec2.serialize(serializer)
@@ -28,7 +27,7 @@ pub fn handle_vec_deser<'de, D: Deserializer<'de>>(
 ) -> Result<Vec<Handle>, D::Error> {
     let vec: Vec<SerializableHandle> = Deserialize::deserialize(deserializer)?;
     Ok(vec
-        .par_iter()
+        .iter()
         .map(|sh| Handle::from_integer(sh.0))
         .collect())
 }

@@ -6,8 +6,8 @@ use gfa::gfa::Orientation;
 use handlegraph::handle::{Direction, Handle, NodeId};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelSliceMut};
+//use rayon::prelude::*;
+//use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 
 /// Additional data about each node, to be used together with seq_bv
@@ -25,7 +25,7 @@ pub struct NodeRef {
 pub fn find_graph_seq_length(graph: &HashGraph) -> u64 {
     let graph_handles: Vec<Handle> = graph.handles_iter().collect();
     graph_handles
-        .into_par_iter()
+        .into_iter()
         .map(|h| graph.sequence(h).len() as u64)
         .sum()
 }
@@ -91,7 +91,7 @@ pub fn find_forward_sequence(
 
     // Sort both handles and edges since this is a PO
     let mut graph_handles: Vec<Handle> = graph.handles_iter().collect();
-    graph_handles.par_sort();
+    graph_handles.sort();
 
     // Iterate over the handles
     for current_handle in graph_handles {
@@ -103,7 +103,7 @@ pub fn find_forward_sequence(
         let left_edges_handles: Vec<Handle> = graph
             .handle_edges_iter(current_handle, Direction::Left)
             .collect();
-        let left_edges_count = left_edges_handles.par_iter().count();
+        let left_edges_count = left_edges_handles.iter().count();
 
         // Create node_ref
         let curr_node_ref = NodeRef {
@@ -121,7 +121,7 @@ pub fn find_forward_sequence(
         let right_edges_handles: Vec<Handle> = graph
             .handle_edges_iter(current_handle, Direction::Right)
             .collect();
-        let right_edges_count = right_edges_handles.par_iter().count();
+        let right_edges_count = right_edges_handles.iter().count();
         // Add right handles to graph_edges
         graph_edges.extend(right_edges_handles);
         *n_edges += right_edges_count as u64;

@@ -14,7 +14,7 @@ use substring::Substring;
 
 use json::object::Object;
 use json::{object, JsonValue};
-use rayon::prelude::IntoParallelIterator;
+//use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq)]

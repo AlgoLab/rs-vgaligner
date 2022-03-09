@@ -5,9 +5,9 @@ use bv::BitVec;
 use handlegraph::handle::{Edge, Handle};
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::ParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
+//use rayon::iter::IndexedParallelIterator;
+//use rayon::iter::ParallelIterator;
+//use rayon::prelude::IntoParallelRefIterator;
 use serde::{Deserialize, Serialize};
 use substring::Substring;
 
@@ -555,7 +555,7 @@ impl Index {
             }
             true => self
                 .outgoing_edges_from_handle(&handle.flip())
-                .par_iter()
+                .iter()
                 .map(|x| x.flip())
                 .rev()
                 .collect(),
@@ -580,7 +580,7 @@ impl Index {
             }
             true => self
                 .incoming_edges_from_handle(&handle.flip())
-                .par_iter()
+                .iter()
                 .map(|x| x.flip())
                 .rev()
                 .collect::<Vec<Handle>>()

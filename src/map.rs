@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::Write;
 
-use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
+//use rayon::iter::ParallelIterator;
+//use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 
 use crate::align::{best_alignment_for_query, GAFAlignment};
 use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
@@ -38,7 +38,7 @@ pub fn map_reads(
     let start_chaining = Instant::now();
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
-        .into_par_iter()
+        .into_iter()
         .map(|query| {
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
@@ -101,15 +101,15 @@ pub fn map_reads(
     // and optionally to console
     info!(
         "Found {} chains!",
-        chains.par_iter().map(|x| x.len()).sum::<usize>()
+        chains.iter().map(|x| x.len()).sum::<usize>()
     );
 
     //info!("Chains are: {:#?}", chains);
 
     let chains_gaf: Vec<GAFAlignment> = chains
-        .par_iter()
+        .iter()
         .flat_map(|query_chains| {
-            query_chains.par_iter().map(|c|
+            query_chains.iter().map(|c|
                     // TODO: overflow when creating alignment from chain
                     match c.is_placeholder {
                         false => GAFAlignment::from_chain(c, index),
@@ -172,7 +172,7 @@ pub fn map_reads(
 /// Store [chains_gaf_strings] in the file with name [file_name]
 fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> std::io::Result<()> {
     let gaf_strings: Vec<String> = gaf_alignments
-        .par_iter()
+        .iter()
         .map(|aln| aln.to_string())
         .collect();
     let mut file =

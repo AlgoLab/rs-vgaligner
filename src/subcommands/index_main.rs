@@ -61,11 +61,13 @@ pub fn index_main(global_matches : &ArgMatches) {
     env_logger::init();
     info!("Start logging");
 
+    /*
     // Create threadpool with the number of threads specified by the user
     match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
         Ok(_) => info!("Building index using {} threads!", rayon::current_num_threads()),
         Err(e) => panic!("{}",e)
     };
+     */
 
     // Create HashGraph from GFA
     let parser = GFAParser::new();

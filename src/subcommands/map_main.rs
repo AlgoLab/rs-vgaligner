@@ -73,11 +73,13 @@ pub fn map_main(global_matches : &ArgMatches) {
     env_logger::init();
     info!("Start logging");
 
+    /*
     // Create threadpool with the number of threads specified by the user
     match rayon::ThreadPoolBuilder::new().num_threads(n_threads).build_global() {
         Ok(_) => info!("Mapping reads to Index using {} threads!", rayon::current_num_threads()),
         Err(e) => panic!("{}",e)
     };
+     */
 
     let index: Index = match idx_prefix.ends_with(".idx") {
         true => Index::load_from_file(idx_prefix.to_string()),

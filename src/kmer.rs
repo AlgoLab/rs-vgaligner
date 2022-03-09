@@ -10,8 +10,8 @@ use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::HashGraph;
 use handlegraph::pathgraph::PathHandleGraph;
 use itertools::Itertools;
-use rayon::iter::ParallelIterator;
-use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
+//use rayon::iter::ParallelIterator;
+//use rayon::prelude::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use substring::Substring;
 
@@ -264,7 +264,7 @@ pub fn generate_kmers(
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
     // Note that the same kmer can appear in different places
     // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
-    complete_kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
+    complete_kmers.sort_by(|x, y| x.seq.cmp(&y.seq));
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     complete_kmers.dedup();
@@ -283,10 +283,10 @@ pub fn generate_kmers_parallel(
 ) -> Vec<GraphKmer> {
     // Get a Vec for rayon
     let mut sorted_graph_handles: Vec<Handle> = graph.handles_iter().collect();
-    sorted_graph_handles.par_sort();
+    sorted_graph_handles.sort();
 
     let mut complete_kmers: Vec<GraphKmer> = sorted_graph_handles
-        .par_iter()
+        .iter()
         .flat_map(|handle| {
             find_kmers_starting_in_handle(&handle, &graph, k, edge_max, degree_max, sampling_rate)
         })
@@ -295,7 +295,7 @@ pub fn generate_kmers_parallel(
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
     // Note that the same kmer can appear in different places
     // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
-    complete_kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
+    complete_kmers.sort_by(|x, y| x.seq.cmp(&y.seq));
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     complete_kmers.dedup();
@@ -314,7 +314,7 @@ fn find_kmers_starting_in_handle(
 ) -> Vec<GraphKmer> {
     // Try all possible orientations
     [true, false]
-        .par_iter()
+        .iter()
         .flat_map(|handle_orient| {
             let handle: Handle;
             let orient: bool;
@@ -525,7 +525,7 @@ pub fn generate_kmers_linearly(
     // Sort the kmers so that equal kmers (= having the same sequence) are close to each other
     // Note that the same kmer can appear in different places
     // (e.g. CACTTCAC -> CAC and CAC must be consecutive in the ordering)
-    kmers.par_sort_by(|x, y| x.seq.cmp(&y.seq));
+    kmers.sort_by(|x, y| x.seq.cmp(&y.seq));
     // Also dedup the vec as exact duplicates only waste space. Also note that dedup only works
     // on consecutive duplicates, so only by sorting beforehand it works correctly.
     kmers.dedup();
@@ -891,7 +891,7 @@ pub fn generate_pos_on_ref_2(
 
     // sort each kmer's positions
     // (dedup not necessary since already done when generating graph kmers)
-    kmers_on_ref.par_iter_mut().for_each(|x| x.par_sort());
+    kmers_on_ref.iter_mut().for_each(|x| x.sort());
     /*
     for positions_list in &mut kmers_on_ref {
         positions_list.par_sort();

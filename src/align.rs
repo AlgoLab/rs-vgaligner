@@ -4,7 +4,7 @@ use std::ops::Range;
 use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
 use handlegraph::handle::Handle;
 use itertools::Itertools;
-use rayon::prelude::*;
+//use rayon::prelude::*;
 
 use crate::chain::Chain;
 use crate::index::Index;
@@ -163,8 +163,8 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .collect();
     let all_handles: Vec<Handle> = start_handles
-        .into_par_iter()
-        .chain(end_handles.into_par_iter())
+        .into_iter()
+        .chain(end_handles.into_iter())
         .collect();
     let min_handle: Handle = *all_handles.iter().min().unwrap();
     let max_handle: Handle = *all_handles.iter().max().unwrap();
@@ -239,7 +239,7 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
             .filter(|x| x.is_reverse())
             .collect();
         po_range_handles = [po_range_handles_fwd, po_range_handles_rev].concat();
-        po_range_handles.par_sort();
+        po_range_handles.sort();
 
         orient = RangeOrient::Both
     }
@@ -295,12 +295,12 @@ pub(crate) fn find_nodes_edges_for_abpoa(
                 // And find their 0-based position in the po range
                 .map(|target_handle| {
                     let starting_pos = range_handles
-                        .par_iter()
-                        .position_any(|x| *x == handle)
+                        .iter()
+                        .position(|x| *x == handle)
                         .unwrap();
                     let ending_pos = range_handles
-                        .par_iter()
-                        .position_any(|x| *x == target_handle)
+                        .iter()
+                        .position(|x| *x == target_handle)
                         .unwrap();
                     (starting_pos, ending_pos)
                 }) //(handle.as_integer() - po_range.par_iter().min().unwrap().as_integer(), target_handle.as_integer() - po_range.par_iter().min().unwrap().as_integer()))
@@ -365,7 +365,7 @@ impl GAFAlignment {
         // the nodes where the anchors are.
         let chain_path_matching: Vec<String> = chain
             .anchors
-            .par_iter()
+            .iter()
             .map(|anchor| {
                 // Find first and last node, and output it in the path matching
                 let first_handle = index.handle_from_seqpos(&anchor.target_begin);
@@ -576,14 +576,14 @@ pub(crate) fn generate_alignment(
     // However, this graph is a subgraph of our original graph, so the ids must be shifted
     // accordingly.
     let og_graph_alignment_path: Vec<Handle> = alignment_path
-        .par_iter()
+        .iter()
         .map(|x| *po_range.handles.get(*x).unwrap())
         .collect();
     //println!("Og graph aligment path: {:#?}", og_graph_alignment_path);
     //println!("Og graph nodes: {:#?}", og_graph_alignment_path.par_iter().map(|x| u64::from(x.id())).collect::<Vec<u64>>());
 
     let alignment_path_string: Vec<String> = og_graph_alignment_path
-        .par_iter()
+        .iter()
         .map(|handle| match handle.is_reverse() {
             false => ">".to_string() + u64::from(handle.id()).to_string().as_str(),
             true => "<".to_string() + u64::from(handle.id()).to_string().as_str(),

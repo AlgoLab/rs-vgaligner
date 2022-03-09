@@ -7,7 +7,7 @@ use std::ops::Range;
 
 use bio::data_structures::interval_tree::*;
 use float_cmp::approx_eq;
-use rayon::prelude::*;
+//use rayon::prelude::*;
 
 use crate::index::Index;
 use crate::io::QuerySequence;
@@ -196,12 +196,12 @@ impl Chain {
     pub fn find_query_start_end(&self) -> Range<u64> {
         let min_query_pos: u64 = self
             .anchors
-            .par_iter()
+            .iter()
             .map(|a| a.query_begin)
             .min()
             .unwrap();
 
-        let max_query_pos: u64 = self.anchors.par_iter().map(|a| a.query_end).max().unwrap();
+        let max_query_pos: u64 = self.anchors.iter().map(|a| a.query_end).max().unwrap();
 
         min_query_pos..max_query_pos
     }
@@ -288,7 +288,7 @@ pub fn chain_anchors(
     // ----- STEP 1 : finding the optimal chaining scores -----
 
     // First sort the anchors by their ending position
-    anchors.par_sort_by(|a, b| a.target_end.position.cmp(&b.target_end.position));
+    anchors.sort_by(|a, b| a.target_end.position.cmp(&b.target_end.position));
     //println!("Query: {}, Anchors: {:#?}", query.seq, anchors);
 
     // Then, compute the maximal chaining score up to the current anchor.
@@ -382,7 +382,7 @@ pub fn chain_anchors(
     // ----- STEP 3: Identifying primary chains (= chains with little or no overlap on the query) -----
 
     // Sort the chains by score in reverse order (higher first)
-    chains.par_sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
+    chains.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Equal));
 
     // Create the Interval Tree
     let mut interval_tree: ArrayBackedIntervalTree<u64, Chain> = ArrayBackedIntervalTree::new();
