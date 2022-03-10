@@ -935,7 +935,7 @@ pub fn generate_hash(seq: &String) -> u64 {
 
 #[cfg(test)]
 mod test {
-    use rayon::prelude::ParallelSliceMut;
+    //use rayon::prelude::*;
 
     use crate::kmer::{SeqOrient, SeqPos};
 
@@ -978,7 +978,7 @@ mod test {
             position: 4,
         };
         let mut orients: Vec<SeqPos> = vec![b, c, a, d];
-        orients.par_sort();
+        orients.sort();
         assert_eq!(orients, vec![a, b, c, d]);
     }
 }

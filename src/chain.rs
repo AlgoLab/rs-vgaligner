@@ -509,8 +509,7 @@ mod test {
     use crate::kmer::SeqOrient;
     use ab_poa::abpoa::abpoa_align_sequence_to_subgraph;
     use handlegraph::handle::Handle;
-    use rayon::iter::ParallelIterator;
-    use rayon::prelude::IntoParallelRefIterator;
+    //use rayon::prelude::*;
 
     /// This function creates a simple graph, used for debugging
     ///        | 2: CT \
