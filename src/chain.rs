@@ -194,12 +194,7 @@ impl Chain {
     }
 
     pub fn find_query_start_end(&self) -> Range<u64> {
-        let min_query_pos: u64 = self
-            .anchors
-            .iter()
-            .map(|a| a.query_begin)
-            .min()
-            .unwrap();
+        let min_query_pos: u64 = self.anchors.iter().map(|a| a.query_begin).min().unwrap();
 
         let max_query_pos: u64 = self.anchors.iter().map(|a| a.query_end).max().unwrap();
 

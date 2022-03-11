@@ -146,6 +146,26 @@ subcommands:
                 help: Number of threads to be used (defaults to all available)
                 required: false
                 takes_value: true
+            - also-validate:
+                  short: v
+                  long: also-validate
+                  help: validate the resulting alignments
+                  required: false
+                  takes_value: false
+            - input-graph:
+                  short: G
+                  long: graph
+                  value_name: FILE
+                  help: Load the Graph from this file (validation)
+                  required: false
+                  takes_value: true
+            - validation-path:
+                  short: P
+                  long: validation-path
+                  value_name: FILE
+                  help: Set the path where to store the results (validation)
+                  required: false
+                  takes_value: true
 
 
 

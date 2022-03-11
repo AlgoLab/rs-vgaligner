@@ -27,7 +27,6 @@ mod serialization;
 pub mod dna;
 pub mod utils;
 
-
 fn main() {
     let yaml = load_yaml!("./subcommands/cli.yml");
     let matches = App::from_yaml(yaml).get_matches();

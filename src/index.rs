@@ -146,7 +146,7 @@ impl Index {
             let mappings = generate_json_mappings(&graph);
             let true_mappings_path = match mappings_path {
                 Some(value) => value,
-                _ => "mappings.json"
+                _ => "mappings.json",
             };
 
             match store_mappings_in_file(&mappings, true_mappings_path.to_string()) {

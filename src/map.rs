@@ -10,12 +10,12 @@ use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
-use log::{info, warn};
-use std::time::{Duration, Instant};
+use crate::validate::{create_validation_records, write_validation_to_file, ValidationRecord};
 use gfa::gfa::GFA;
 use gfa::parser::GFAParser;
 use handlegraph::hashgraph::HashGraph;
-use crate::validate::{create_validation_records, ValidationRecord, write_validation_to_file};
+use log::{info, warn};
+use std::time::{Duration, Instant};
 
 /// Map the [input] reads against the [index], in order to obtain Chains
 /// (and eventually POA Alignments is [also_align]), which can be printed to console
@@ -37,6 +37,9 @@ pub fn map_reads(
     out_prefix: Option<&str>,
     also_align: bool,
     align_best_n: u64,
+    also_validate: bool,
+    input_graph: Option<&str>,
+    validation_path: Option<&str>,
 ) {
     info!("Found {} reads!", inputs.len());
 
@@ -166,30 +169,27 @@ pub fn map_reads(
             }
         }
 
-        /*
-        // TODO: add as parameter
-        let also_validate = true;
-        let input_file = "";
-        let validation_file_name = "";
-
         if also_validate {
             // Create HashGraph from GFA
             let parser = GFAParser::new();
             let gfa: GFA<usize, ()> = parser
-                .parse_file(&PathBuf::from(input_file))
+                .parse_file(&PathBuf::from(input_graph.unwrap()))
                 .unwrap();
             let graph = HashGraph::from_gfa(&gfa);
 
             // Obtain validation records
-            let val_records : Vec<ValidationRecord> = create_validation_records(&graph,&alignments, &inputs);
+            let val_records: Vec<ValidationRecord> =
+                create_validation_records(&graph, &alignments, &inputs);
 
             // Write validation records to file
-            match write_validation_to_file(&val_records, validation_file_name.to_string()) {
+            match write_validation_to_file(&val_records, validation_path.unwrap().to_string()) {
                 Err(e) => panic!("{}", e),
-                _ => info!("Alignments stored correctly in {}!", validation_file_name),
+                _ => info!(
+                    "Validation stored correctly in {}!",
+                    validation_path.unwrap().to_string()
+                ),
             }
         }
-         */
 
         if write_console {
             for gaf_str in alignments {
@@ -201,10 +201,7 @@ pub fn map_reads(
 
 /// Store [chains_gaf_strings] in the file with name [file_name]
 fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> std::io::Result<()> {
-    let gaf_strings: Vec<String> = gaf_alignments
-        .iter()
-        .map(|aln| aln.to_string())
-        .collect();
+    let gaf_strings: Vec<String> = gaf_alignments.iter().map(|aln| aln.to_string()).collect();
     let mut file =
         File::create(&file_name).unwrap_or_else(|_| panic!("Couldn't create file {}", &file_name));
     file.write_all(&gaf_strings.join("").as_bytes())
@@ -236,7 +233,8 @@ mod test {
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false, 100,
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false, 100, false,
+            None, None,
         );
     }
 
@@ -252,7 +250,8 @@ mod test {
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
-            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true, 100,
+            &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, true, 100, false, None,
+            None,
         );
     }
 }

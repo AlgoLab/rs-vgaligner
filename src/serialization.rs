@@ -26,10 +26,7 @@ pub fn handle_vec_deser<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<Handle>, D::Error> {
     let vec: Vec<SerializableHandle> = Deserialize::deserialize(deserializer)?;
-    Ok(vec
-        .iter()
-        .map(|sh| Handle::from_integer(sh.0))
-        .collect())
+    Ok(vec.iter().map(|sh| Handle::from_integer(sh.0)).collect())
 }
 
 /// Serialize an object of any kind (as long as it implements Serialize as required by Serde)

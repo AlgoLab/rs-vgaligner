@@ -294,10 +294,7 @@ pub(crate) fn find_nodes_edges_for_abpoa(
                 .filter(|target_handle| range_handles.contains(target_handle))
                 // And find their 0-based position in the po range
                 .map(|target_handle| {
-                    let starting_pos = range_handles
-                        .iter()
-                        .position(|x| *x == handle)
-                        .unwrap();
+                    let starting_pos = range_handles.iter().position(|x| *x == handle).unwrap();
                     let ending_pos = range_handles
                         .iter()
                         .position(|x| *x == target_handle)

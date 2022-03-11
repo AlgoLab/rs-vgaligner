@@ -5,20 +5,18 @@ use gfa::{gfa::GFA, parser::GFAParser};
 use handlegraph::hashgraph::HashGraph;
 
 use crate::index::Index;
-use std::env;
 use log::{info, warn};
+use std::env;
 
-pub fn index_main(global_matches : &ArgMatches) {
+pub fn index_main(global_matches: &ArgMatches) {
     let matches = global_matches.subcommand_matches("index").unwrap();
 
-    let in_path_file = matches
-        .value_of("input")
-        .unwrap();
+    let in_path_file = matches.value_of("input").unwrap();
 
     let out_prefix = matches
         .value_of("out-prefix")
         // Keep the same path but remove ".gfa"
-        .unwrap_or(&in_path_file[0..in_path_file.len()-4]);
+        .unwrap_or(&in_path_file[0..in_path_file.len() - 4]);
 
     let kmer_length = matches
         .value_of("kmer-length")
@@ -40,18 +38,16 @@ pub fn index_main(global_matches : &ArgMatches) {
 
     let sampling_rate = match matches.value_of("sampling-rate") {
         Some(rate) => Some(rate.parse::<u64>().unwrap()),
-        _ => None
+        _ => None,
     };
 
-    let generate_mappings = matches
-        .is_present("generate-mappings");
+    let generate_mappings = matches.is_present("generate-mappings");
 
-    let mappings_path :Option<&str> = matches
-        .value_of("mappings-path");
+    let mappings_path: Option<&str> = matches.value_of("mappings-path");
 
     let n_threads = matches
         .value_of("n-threads")
-        .unwrap_or(&"0")    // Use all available threads
+        .unwrap_or(&"0") // Use all available threads
         .parse::<usize>()
         .unwrap();
 
@@ -74,9 +70,7 @@ pub fn index_main(global_matches : &ArgMatches) {
 
     // Create HashGraph from GFA
     let parser = GFAParser::new();
-    let gfa: GFA<usize, ()> = parser
-        .parse_file(&PathBuf::from(in_path_file))
-        .unwrap();
+    let gfa: GFA<usize, ()> = parser.parse_file(&PathBuf::from(in_path_file)).unwrap();
     let graph = HashGraph::from_gfa(&gfa);
 
     // Build the index for the input graph
@@ -88,6 +82,6 @@ pub fn index_main(global_matches : &ArgMatches) {
         Some(out_prefix),
         sampling_rate,
         generate_mappings,
-        mappings_path
+        mappings_path,
     );
 }
