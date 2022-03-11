@@ -610,7 +610,7 @@ pub(crate) fn generate_alignment(
         residue: Some(0),
         alignment_block_length: Some(result.n_aligned_bases as u64),
         mapping_quality: Some(255), //result.best_score as u64,
-        notes: Some("as:i:-30".to_string() + " " + result.cs_string.as_str()), //+ " " + "cg:Z:" + result.cigar.as_str()),
+        notes: Some("as:i:-30".to_string() + " " + result.cs_string.as_str() + ",cg:Z:" + result.cigar.as_str()),
     }
 }
 
