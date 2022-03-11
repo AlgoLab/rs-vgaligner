@@ -1689,6 +1689,7 @@ dependencies = [
  "json",
  "log",
  "mockall",
+ "regex",
  "serde",
  "serde_json",
  "serde_with",

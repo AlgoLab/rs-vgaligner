@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 
 //use rayon::iter::ParallelIterator;
 //use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
@@ -11,6 +12,10 @@ use crate::io::QuerySequence;
 
 use log::{info, warn};
 use std::time::{Duration, Instant};
+use gfa::gfa::GFA;
+use gfa::parser::GFAParser;
+use handlegraph::hashgraph::HashGraph;
+use crate::validate::{create_validation_records, ValidationRecord, write_validation_to_file};
 
 /// Map the [input] reads against the [index], in order to obtain Chains
 /// (and eventually POA Alignments is [also_align]), which can be printed to console
@@ -158,6 +163,30 @@ pub fn map_reads(
             match write_gaf_to_file(&alignments, file_name.to_string()) {
                 Err(e) => panic!("{}", e),
                 _ => info!("Alignments stored correctly in {}!", file_name),
+            }
+        }
+
+        // TODO: add as parameter
+        let also_validate = true;
+        let input_file = "";
+        let validation_file_name = "";
+
+        if also_validate {
+
+            // Create HashGraph from GFA
+            let parser = GFAParser::new();
+            let gfa: GFA<usize, ()> = parser
+                .parse_file(&PathBuf::from(input_file))
+                .unwrap();
+            let graph = HashGraph::from_gfa(&gfa);
+
+            // Obtain validation records
+            let val_records : Vec<ValidationRecord> = create_validation_records(&graph,&alignments, &inputs);
+
+            // Write validation records to file
+            match write_validation_to_file(&val_records, validation_file_name.to_string()) {
+                Err(e) => panic!("{}", e),
+                _ => info!("Alignments stored correctly in {}!", validation_file_name),
             }
         }
 

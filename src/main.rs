@@ -13,6 +13,7 @@ mod subcommands {
 pub mod align;
 pub mod index;
 pub mod map;
+pub mod validate;
 
 // Main data structures used
 pub mod chain;
@@ -25,6 +26,7 @@ mod serialization;
 // Utils
 pub mod dna;
 pub mod utils;
+
 
 fn main() {
     let yaml = load_yaml!("./subcommands/cli.yml");

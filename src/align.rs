@@ -342,19 +342,19 @@ pub(crate) fn find_nodes_edges_for_abpoa(
 /// Represents an alignment in GAF format.
 #[derive(Debug, Clone)]
 pub struct GAFAlignment {
-    query_name: Option<String>,
-    query_length: Option<u64>,
-    query_start: Option<u64>,
-    query_end: Option<u64>,
-    strand: Option<char>,
-    path_matching: Option<String>,
-    path_length: Option<u64>,
-    path_start: Option<u64>,
-    path_end: Option<u64>,
-    residue: Option<u64>,
-    alignment_block_length: Option<u64>,
-    mapping_quality: Option<u64>,
-    notes: Option<String>,
+    pub query_name: Option<String>,
+    pub query_length: Option<u64>,
+    pub query_start: Option<u64>,
+    pub query_end: Option<u64>,
+    pub strand: Option<char>,
+    pub path_matching: Option<String>,
+    pub path_length: Option<u64>,
+    pub path_start: Option<u64>,
+    pub path_end: Option<u64>,
+    pub residue: Option<u64>,
+    pub alignment_block_length: Option<u64>,
+    pub mapping_quality: Option<u64>,
+    pub notes: Option<String>,
 }
 impl GAFAlignment {
     pub(crate) fn from_chain(chain: &Chain, index: &Index) -> Self {
