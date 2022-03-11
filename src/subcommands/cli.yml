@@ -54,6 +54,13 @@ subcommands:
               help: generate paths-to-sequences mappings (only used for debugging/validation)
               required: false
               takes_value: false
+        - mappings-path:
+              short: p
+              long: mappings-path
+              help: place where to put the mappings
+              required: false
+              takes_value: true
+              value_name: FILE
         - n-threads:
             short: t
             long: threads

@@ -166,13 +166,13 @@ pub fn map_reads(
             }
         }
 
+        /*
         // TODO: add as parameter
         let also_validate = true;
         let input_file = "";
         let validation_file_name = "";
 
         if also_validate {
-
             // Create HashGraph from GFA
             let parser = GFAParser::new();
             let gfa: GFA<usize, ()> = parser
@@ -189,6 +189,7 @@ pub fn map_reads(
                 _ => info!("Alignments stored correctly in {}!", validation_file_name),
             }
         }
+         */
 
         if write_console {
             for gaf_str in alignments {
@@ -231,7 +232,7 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None, None, false);
+        let index = Index::build(&graph, 11, 100, 100, None, None, false, None);
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(
@@ -247,7 +248,7 @@ mod test {
             .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
-        let index = Index::build(&graph, 11, 100, 100, None, None, false);
+        let index = Index::build(&graph, 11, 100, 100, None, None, false, None);
         let query = read_seqs_from_file("./test/single-read-test.fa").unwrap();
 
         map_reads(

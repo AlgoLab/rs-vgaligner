@@ -114,6 +114,7 @@ impl Index {
         out_prefix: Option<&str>,
         sampling_rate: Option<u64>,
         generate_mappings: bool,
+        mappings_path: Option<&str>,
     ) -> Self {
         // Get the number of nodes in the graph
         let number_nodes = graph.graph.len() as u64;
@@ -143,7 +144,15 @@ impl Index {
 
         if generate_mappings {
             let mappings = generate_json_mappings(&graph);
-            store_mappings_in_file(&mappings, "mappings.json".to_string());
+            let true_mappings_path = match mappings_path {
+                Some(value) => value,
+                _ => "mappings.json"
+            };
+
+            match store_mappings_in_file(&mappings, true_mappings_path.to_string()) {
+                Err(e) => panic!("{}", e),
+                _ => info!("Mappings correctly stored in {}!", true_mappings_path),
+            }
         }
 
         // Generate the kmers from the graph, and obtain graph-based positions.
@@ -1062,7 +1071,7 @@ mod test {
     #[test]
     fn test_serialization() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
         let serialized_index = bincode::serialize(&index).unwrap();
         let deserialized_index: Index = bincode::deserialize(&serialized_index).unwrap();
 
@@ -1094,7 +1103,7 @@ mod test {
     fn test_index_access() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         // find the positions for "ACT" kmer
         let ref_pos_vec = index.find_positions_for_query_kmer("ACT");
@@ -1123,7 +1132,7 @@ mod test {
         let h2 = graph.create_handle("AAA".as_bytes(), 2);
         graph.create_edge(&Edge(h1, h2));
 
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         // find the positions for "ACT" kmer
         let ref_pos_vec = index.find_positions_for_query_kmer("TTT");
@@ -1158,7 +1167,7 @@ mod test {
     fn test_index_access_bv() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         //println!("Node ref: {:#?}", index.node_ref);
         for handle in graph.handles_iter().sorted() {
@@ -1182,7 +1191,7 @@ mod test {
     fn test_index_access_edges() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         for handle in graph.handles_iter().sorted() {
             let node_ref_pos = (u64::from(handle.id()) - 1) as usize;
@@ -1204,7 +1213,7 @@ mod test {
     fn test_index_access_nodes() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         let pos1 = SeqPos {
             orient: SeqOrient::Forward,
@@ -1246,7 +1255,7 @@ mod test {
     fn test_edges_from_handle() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
 
@@ -1272,7 +1281,7 @@ mod test {
     fn test_index_incoming_outgoing_edges() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
@@ -1355,7 +1364,7 @@ mod test {
     fn test_index_seq_from_start_end_seqpos() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         let begin = SeqPos::new(SeqOrient::Forward, 0);
         let end = SeqPos::new(SeqOrient::Forward, index.seq_length);
@@ -1380,7 +1389,7 @@ mod test {
     fn test_seq_from_handle() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
 
@@ -1410,7 +1419,7 @@ mod test {
     fn test_handle_from_seqpos() {
         // Build the index
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
         let mut handles: Vec<Handle> = graph.handles_iter().sorted().collect();
 
         let p1: SeqPos = SeqPos::new(SeqOrient::Forward, 0);
@@ -1440,7 +1449,7 @@ mod test {
         graph.create_edge(&Edge(h2, h4));
         graph.create_edge(&Edge(h3, h4));
 
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         let mut handles: Vec<Handle> = graph.handles_iter().collect();
         handles.sort();
@@ -1463,7 +1472,7 @@ mod test {
     #[test]
     fn test_seqpos_returns_all() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
         assert_eq!(index.seq_fwd.len(), index.seq_rev.len());
         for i in 0..index.seq_fwd.len() {
             for orient in vec![SeqOrient::Forward, SeqOrient::Reverse] {
@@ -1618,7 +1627,7 @@ mod test {
     #[test]
     fn test_inverse_rank() {
         let graph = create_simple_graph();
-        let index = Index::build(&graph, 3, 100, 100, None, None, false);
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
 
         println!("Seq bv: {:#?}", index.seq_bv);
         let ranks: Vec<usize> = (0..index.seq_bv.len() - 1)

@@ -46,6 +46,9 @@ pub fn index_main(global_matches : &ArgMatches) {
     let generate_mappings = matches
         .is_present("generate-mappings");
 
+    let mappings_path :Option<&str> = matches
+        .value_of("mappings-path");
+
     let n_threads = matches
         .value_of("n-threads")
         .unwrap_or(&"0")    // Use all available threads
@@ -84,6 +87,7 @@ pub fn index_main(global_matches : &ArgMatches) {
         max_degree,
         Some(out_prefix),
         sampling_rate,
-        generate_mappings
+        generate_mappings,
+        mappings_path
     );
 }
