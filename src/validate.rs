@@ -9,6 +9,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::fs::File;
 use std::io::Write;
+use log::info;
 
 pub struct ValidationRecord {
     pub read_name: String,
@@ -34,21 +35,47 @@ impl ValidationRecord {
         alignment: &GAFAlignment,
         read: &QuerySequence,
     ) -> Self {
-        let nodes_ids = parse_nodes_from_path_matching(&alignment.path_matching.clone().unwrap());
+        info!("Validating alignment for {}", alignment.clone().query_name.unwrap());
 
-        ValidationRecord {
-            read_name: alignment.clone().query_name.unwrap(),
-            CIGAR: alignment.clone().notes.unwrap(),
-            read_seq: read.seq.clone().to_string(),
-            nodes_id: nodes_ids.clone(),
-            nodes_seq: get_nodes_sequences(graph, &nodes_ids),
+        match alignment.clone().path_matching {
+            Some(path) => {
+                //info!("Path matching {}", path);
+                let nodes_ids = parse_nodes_from_path_matching(&path);
+
+                ValidationRecord {
+                    read_name: alignment.clone().query_name.unwrap(),
+                    CIGAR: alignment.clone().notes.unwrap().split(',').last().unwrap().to_string(),
+                    read_seq: read.seq.clone().to_string(),
+                    nodes_id: nodes_ids.clone(),
+                    nodes_seq: get_nodes_sequences(graph, &nodes_ids),
+                }
+            },
+            _ => {
+                info!("Read {} could not be aligned", alignment.clone().query_name.unwrap());
+
+                ValidationRecord {
+                    read_name: alignment.clone().query_name.unwrap(),
+                    CIGAR: "NOT ALIGNED".to_string(),
+                    read_seq: read.seq.clone().to_string(),
+                    nodes_id: vec![],
+                    nodes_seq: vec![]
+                }
+            }
         }
+
     }
 
     pub fn to_string(&self) -> String {
+        /*
         format!(
-            "{}\t{}\t{}\t{}\t{:#?}\n",
-            self.read_name, self.CIGAR, self.read_seq, self.read_name, self.nodes_seq
+            "{}\t{}\t{}\t{:#?}\t{:#?}\n",
+            self.read_name, self.CIGAR, self.read_seq, self.nodes_id, self.nodes_seq
+        )
+         */
+
+        format!(
+            "{}\n{}\n{}\n{:?}\n{:?}\n\n",
+            self.read_name, self.CIGAR, self.read_seq, self.nodes_id, self.nodes_seq
         )
     }
 }
@@ -65,8 +92,11 @@ pub fn get_nodes_sequences(graph: &HashGraph, nodes_ids: &Vec<u64>) -> Vec<Strin
     nodes_ids
         .iter()
         .map(|id| {
+            //info!("id is: {}", id);
+            //TODO: validation should take strand into account,
+            //not necessary but would probably be better
             graph
-                .sequence(Handle::from_integer(*id))
+                .sequence(Handle::pack(*id, false))
                 .into_string_lossy()
         })
         .collect()
@@ -79,8 +109,10 @@ pub fn create_validation_records(
 ) -> Vec<ValidationRecord> {
     let records: Vec<ValidationRecord> = alignments
         .iter()
-        //TODO: fix read to use
-        .map(|a| ValidationRecord::from_graph_and_alignment(graph, a, reads.get(0).unwrap()))
+        .map(|a| {
+            let aligned_read = reads.iter().find(|x| x.name == a.clone().query_name.unwrap()).unwrap();
+            ValidationRecord::from_graph_and_alignment(graph, a, aligned_read)
+        })
         .collect();
     records
 }
@@ -108,4 +140,12 @@ mod test {
     fn test_simple_parsing() {
         assert_eq!(parse_nodes_from_path_matching(">1<2>3"), vec![1, 2, 3])
     }
+
+    #[test]
+    fn test_double_digit_parsing() {
+        assert_eq!(parse_nodes_from_path_matching(">10<20"), vec![10, 20])
+    }
+
+    #[test]
+    fn test_empty_parsing() { assert_eq!(parse_nodes_from_path_matching("*"),  Vec::<u64>::new()) }
 }
