@@ -1,4 +1,5 @@
 use core::cmp;
+use std::collections::HashMap;
 use std::ops::Range;
 
 use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
@@ -12,6 +13,7 @@ use crate::index::Index;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
+use crate::validate::{create_subgraph_GFA, export_GFA};
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
@@ -54,6 +56,17 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
     );
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.iter().map(|x| &x as &str).collect();
+    info!(
+        "For read {} found nodes: {:?} and edges: {:?}",
+        chain.query.name,
+        nodes_str,
+        edges
+    );
+
+    let paths: HashMap<String, Vec<usize>> = HashMap::new();
+    let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &HashMap::new());
+    export_GFA(subgraph_as_gfa, format!("{}-subgraph.gfa", chain.query.name)).unwrap();
+
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
     //println!("Query seq: {:#?}", chain.query.seq);
@@ -279,7 +292,7 @@ pub(crate) fn find_nodes_edges_for_abpoa(
     // Get the edges between the handles in the po_range
     // In abpoa the nodes are given as 0-based tuples (starting_node, ending_node).
     // For example in order to create this graph: "ACG" -> "AAA"
-    // the following instuction will be used:
+    // the following instruction will be used:
     // aligner.add_nodes_edges(&vec!["ACG", "AAA"], &vec![(0, 1)]);
     let edges: Vec<(usize, usize)> = range_handles
         .clone()
@@ -360,6 +373,7 @@ impl GAFAlignment {
         // Create a path matching (list of oriented nodes) for the chain.
         // Since we don't have an actual path on the graph, we just take
         // the nodes where the anchors are.
+        /*
         let chain_path_matching: Vec<String> = chain
             .anchors
             .iter()
@@ -386,6 +400,30 @@ impl GAFAlignment {
                 }
             })
             .collect();
+            */
+
+        info!("Anchors: {:#?}", chain.anchors);
+        let mut chain_path_matching: Vec<String> = chain
+            .anchors
+            .iter()
+            .map(|anchor|{
+                // Find first and last node, and output it in the path matching
+                let first_handle = index.handle_from_seqpos(&anchor.target_begin);
+                let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
+
+                // Add the orientation
+                let first_node_str: String = match first_handle.is_reverse() {
+                    false => ">".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                    true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                };
+                let last_node_str: String = match last_handle.is_reverse() {
+                    false => ">".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                    true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                };
+
+                format!("({},{}),", first_node_str, last_node_str)
+            })
+            .collect();
 
         GAFAlignment {
             query_name: Some(chain.query.name.clone()),
@@ -400,7 +438,8 @@ impl GAFAlignment {
             residue: Some(0),
             alignment_block_length: Some(0),
             mapping_quality: Some(cmp::min(chain.mapping_quality as u64, 254_u64)),
-            notes: Some("ta:Z:chain".to_string()),
+            notes: Some(format!("{},{}","ta:Z:chain".to_string(),
+                                format!("n_anchors: {}", chain.anchors.len()))),
         }
     }
 

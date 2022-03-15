@@ -1,4 +1,4 @@
-name: rs-vgalign
+name: rs-vgaligner
 version: "0.7"
 author: Francesco Porto <francesco.porto97@gmail.com>
 about: Aligns reads to a Variation Graph
