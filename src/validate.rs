@@ -5,7 +5,7 @@ use crate::io::QuerySequence;
 use bstr::ByteVec;
 use handlegraph::handle::Handle;
 use handlegraph::handlegraph::HandleGraph;
-use handlegraph::hashgraph::HashGraph;
+use handlegraph::hashgraph::{HashGraph, PathId};
 use itertools::Itertools;
 use regex::Regex;
 use std::fs::File;
@@ -139,11 +139,19 @@ pub fn write_validation_to_file(
     Ok(())
 }
 
-pub fn create_subgraph_GFA(nodes: &Vec<&str>, edges: &Vec<(usize, usize)>, paths: &HashMap<u64,Vec<usize>>) -> String {
+pub fn create_subgraph_GFA(nodes: &Vec<&str>, edges: &Vec<(usize, usize)>, paths: &HashMap<PathId,Vec<u64>>) -> String {
     let header = format!("H VN:Z:1.0 NS:i:{} NL:i:{} NP:i:{}\n", nodes.len(), edges.len(), 0);
     let nodes_GAF: Vec<String> = nodes.iter().enumerate().map(|(id,seq)| format!("S\t{}\t{}\n", id+1, seq)).collect();
     let edges_GAF: Vec<String> = edges.iter().map(|(s,e)| format!("L\t{}\t{}\t{}\t{}\t0M\n", s+1, '+', e+1, '+')).collect();
-    let paths_GAF: Vec<String> = paths.iter().map(|(name,value)| format!("P\t{}\t{:?}\t{}\n", name, value, '*')).collect();
+
+    let mut paths_as_strings: HashMap<PathId, Vec<String>> =
+        paths.iter().map(|(name, value)| {
+            let values_string: Vec<String> = value.iter().map(|v| format!("{}{}", v.to_string(), "+")).collect();
+            (*name, values_string)
+        }).collect();
+
+    let paths_GAF: Vec<String> = paths_as_strings.iter().sorted().map(|(name,value)| format!("P\t{}\t{}\t{}\n", name, value.join(","), '*')).collect();
+
     format!("{}{}{}{}", header, nodes_GAF.join(""), edges_GAF.join(""), paths_GAF.join(""))
 }
 

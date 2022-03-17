@@ -13,6 +13,8 @@ use crate::index::Index;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
+use handlegraph::hashgraph::{HashGraph, PathId};
+use handlegraph::pathgraph::PathHandleGraph;
 use crate::validate::{create_subgraph_GFA, export_GFA};
 
 /// Get all the alignments from the [query_chains], but only return the best one.
@@ -20,13 +22,14 @@ pub fn best_alignment_for_query(
     index: &Index,
     query_chains: &Vec<Chain>,
     align_best_n: u64,
+    graph: &HashGraph
 ) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| match chain.is_placeholder {
-            false => obtain_base_level_alignment(index, chain),
+            false => obtain_base_level_alignment(index, chain, graph),
             true => GAFAlignment::from_placeholder_chain(chain),
         })
         .collect();
@@ -36,7 +39,7 @@ pub fn best_alignment_for_query(
 }
 
 /// Get the POA alignment starting from a [chain].
-pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
+pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain, graph: &HashGraph) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
 
     let start_range = Instant::now();
@@ -63,8 +66,8 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
         edges
     );
 
-    let paths: HashMap<String, Vec<usize>> = HashMap::new();
-    let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &HashMap::new());
+    let paths = get_subgraph_paths(graph, &po_range);
+    let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &paths);
     export_GFA(subgraph_as_gfa, format!("{}-subgraph.gfa", chain.query.name)).unwrap();
 
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
@@ -653,9 +656,33 @@ pub(crate) fn generate_alignment(
     }
 }
 
+pub fn get_subgraph_paths(graph: &HashGraph, po_range: &OrientedGraphRange) -> HashMap<PathId, Vec<u64>> {
+    let mut subgraph_paths: HashMap<PathId, Vec<u64>> = HashMap::new();
+
+    let min_in_range = po_range.handles.iter().min().unwrap().unpack_number();
+
+    for path_id in graph.paths_iter() {
+        let mut nodes_in_path: Vec<u64> = vec![];
+        let curr_path = graph.get_path(path_id).unwrap();
+        for handle in &curr_path.nodes {
+            if po_range.handles.contains(&handle) {
+                nodes_in_path.push(handle.unpack_number() - min_in_range + 1);
+            }
+        }
+        subgraph_paths.insert(*path_id, nodes_in_path);
+    }
+    subgraph_paths
+}
+
 #[cfg(test)]
 mod test {
-    use crate::align::GAFAlignment;
+    use std::hash::Hash;
+    use std::path::PathBuf;
+    use gfa::gfa::{GFA, Orientation};
+    use gfa::parser::GFAParser;
+    use handlegraph::handle::Handle;
+    use handlegraph::hashgraph::HashGraph;
+    use crate::align::{GAFAlignment, get_subgraph_paths, OrientedGraphRange, RangeOrient};
     use crate::chain::Chain;
     use crate::io::QuerySequence;
 
@@ -687,5 +714,20 @@ mod test {
             "*"
         );
         assert_eq!(alignment.to_string(), expected_string);
+    }
+
+    #[test]
+    fn get_graph_paths() {
+        // Create HashGraph from GFA
+        let parser = GFAParser::new();
+        let gfa: GFA<usize, ()> = parser.parse_file(&PathBuf::from("./test/test.gfa")).unwrap();
+        let graph = HashGraph::from_gfa(&gfa);
+
+        let oriented_graph_range = OrientedGraphRange {
+            orient: RangeOrient::Forward,
+            handles: vec![Handle::new(graph.min_id, Orientation::Forward), Handle::new(graph.max_id, Orientation::Forward)]
+        };
+
+        println!("Get subgraph path: {:#?}", get_subgraph_paths(&graph, &oriented_graph_range));
     }
 }

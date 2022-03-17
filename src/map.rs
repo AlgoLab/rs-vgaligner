@@ -146,10 +146,17 @@ pub fn map_reads(
 
     // Perform the alignment with rs-abPOA, using the chains as a reference
     if also_align {
+
+        let parser = GFAParser::new();
+        let gfa: GFA<usize, ()> = parser
+            .parse_file(&PathBuf::from(input_graph.unwrap()))
+            .unwrap();
+        let graph = HashGraph::from_gfa(&gfa);
+
         let start_alignment = Instant::now();
         let alignments: Vec<GAFAlignment> = chains
             .iter()
-            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n))
+            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n, &graph))
             .collect();
         info!(
             "Alignment took: {} ms",
@@ -170,12 +177,14 @@ pub fn map_reads(
         }
 
         if also_validate {
+            /*
             // Create HashGraph from GFA
             let parser = GFAParser::new();
             let gfa: GFA<usize, ()> = parser
                 .parse_file(&PathBuf::from(input_graph.unwrap()))
                 .unwrap();
             let graph = HashGraph::from_gfa(&gfa);
+             */
 
             // Obtain validation records
             let val_records: Vec<ValidationRecord> =

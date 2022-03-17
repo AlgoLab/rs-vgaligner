@@ -658,7 +658,7 @@ mod test {
         let input_seq = QuerySequence::from_string(&String::from("ACTGCA"));
         let mut anchors = anchors_for_query(&index, &input_seq);
 
-        println!("Anchors: {:#?}", anchors);
+        //println!("Anchors: {:#?}", anchors);
         println!("Len: {:#?}", anchors.len());
         let chains: Vec<Chain> = chain_anchors(
             &mut anchors,
