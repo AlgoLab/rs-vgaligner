@@ -10,36 +10,45 @@ use itertools::Itertools;
 use crate::chain::Chain;
 use crate::index::Index;
 
+use crate::validate::{create_subgraph_GFA, export_GFA};
+use handlegraph::hashgraph::{HashGraph, PathId};
+use handlegraph::pathgraph::PathHandleGraph;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
-use handlegraph::hashgraph::{HashGraph, PathId};
-use handlegraph::pathgraph::PathHandleGraph;
-use crate::validate::{create_subgraph_GFA, export_GFA};
+use ab_poa::abpoa::rand;
+use crate::kmer::SeqOrient;
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
     index: &Index,
     query_chains: &Vec<Chain>,
     align_best_n: u64,
-    graph: &HashGraph
+    graph: &HashGraph,
+    export_subgraphs: bool,
 ) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| match chain.is_placeholder {
-            false => obtain_base_level_alignment(index, chain, graph),
+            false => obtain_base_level_alignment(index, chain, graph, export_subgraphs),
             true => GAFAlignment::from_placeholder_chain(chain),
         })
         .collect();
+
     alignments.sort_by(|a, b| b.path_length.cmp(&a.path_length));
     //println!("Alignments: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
 
 /// Get the POA alignment starting from a [chain].
-pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain, graph: &HashGraph) -> GAFAlignment {
+pub(crate) fn obtain_base_level_alignment(
+    index: &Index,
+    chain: &Chain,
+    graph: &HashGraph,
+    export_subgraph: bool,
+) -> GAFAlignment {
     // Find the range of node ids involved in the alignment
 
     let start_range = Instant::now();
@@ -48,7 +57,7 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain, graph: &
         "Finding the PO range took: {} ms",
         start_range.elapsed().as_millis()
     );
-    //println!("Graph range: {:#?}", po_range);
+    println!("Graph range: {:#?}", po_range.handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
 
     // Find nodes and edges
     let start_find_graph = Instant::now();
@@ -61,14 +70,23 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain, graph: &
     let nodes_str: Vec<&str> = nodes.iter().map(|x| &x as &str).collect();
     info!(
         "For read {} found nodes: {:?} and edges: {:?}",
-        chain.query.name,
-        nodes_str,
-        edges
+        chain.query.name, nodes_str, edges
     );
 
-    let paths = get_subgraph_paths(graph, &po_range);
-    let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &paths);
-    export_GFA(subgraph_as_gfa, format!("{}-subgraph.gfa", chain.query.name)).unwrap();
+    // The obtained subgraph can be exported as a GAF, if the user
+    // chooses to do so (mostly for debug purposes)
+    if export_subgraph {
+        let paths = get_subgraph_paths(graph, &po_range);
+        let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &paths);
+        export_GFA(
+            subgraph_as_gfa,
+            format!("{}-subgraph-{}.gfa", chain.query.name, chain.anchors.len()),
+        )
+            .unwrap();
+
+        info!("GFA exported in {}", format!("subgraphs/{}-subgraph-{}.gfa", chain.query.name, chain.score));
+    }
+
 
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
@@ -178,12 +196,20 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         // last included position
         .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .collect();
+
+    //println!("Start ids: {:?}", start_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    //println!("End ids: {:?}", end_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+
     let all_handles: Vec<Handle> = start_handles
         .into_iter()
         .chain(end_handles.into_iter())
         .collect();
     let min_handle: Handle = *all_handles.iter().min().unwrap();
     let max_handle: Handle = *all_handles.iter().max().unwrap();
+
+    //println!("ids: {:?}", all_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    //println!("Min id: {}", min_handle.unpack_number());
+    //println!("Max id: {}", max_handle.unpack_number());
 
     /*
     println!(
@@ -405,26 +431,99 @@ impl GAFAlignment {
             .collect();
             */
 
-        info!("Anchors: {:#?}", chain.anchors);
+        let first_chain_node: Option<u64> = None;
+        let last_chain_node: Option<u64> = None;
+        //info!("Anchors: {:#?}", chain.anchors);
         let mut chain_path_matching: Vec<String> = chain
             .anchors
             .iter()
-            .map(|anchor|{
+            .map(|anchor| {
+                /*
                 // Find first and last node, and output it in the path matching
                 let first_handle = index.handle_from_seqpos(&anchor.target_begin);
                 let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
 
+                let first_node_start = index.get_bv_select(u64::from(first_handle.id()));
+                let first_node_offset = anchor.target_begin.position - first_node_start as u64;
+
+                let last_node_start = index.get_bv_select(u64::from(last_handle.id()));
+                let last_node_offset = anchor.target_end.position - last_node_start as u64;
+
+               /*
+                let first_handle_rank = first_handle.unpack_number() - 1;
+                let first_node_start = index
+                    .node_ref
+                    .get(first_handle_rank as usize)
+                    .unwrap()
+                    .seq_idx;
+                let first_node_offset = anchor.target_begin.position - first_node_start;
+
+                let last_handle_rank = last_handle.unpack_number() - 1;
+                let last_node_start = index
+                    .node_ref
+                    .get(last_handle_rank as usize)
+                    .unwrap()
+                    .seq_idx;
+                let last_node_offset = anchor.target_end.position - last_node_start;
+                 */
+
                 // Add the orientation
                 let first_node_str: String = match first_handle.is_reverse() {
-                    false => ">".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                    false => {
+                        ">".to_string()
+                            + u64::from(first_handle.id()).to_string().as_str()
+                            + ":"
+                            + first_node_offset.to_string().as_str()
+                    }
                     true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
                 };
                 let last_node_str: String = match last_handle.is_reverse() {
-                    false => ">".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                    false => {
+                        ">".to_string()
+                            + u64::from(last_handle.id()).to_string().as_str()
+                            + ":"
+                            + last_node_offset.to_string().as_str()
+                    }
                     true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
                 };
 
                 format!("({},{}),", first_node_str, last_node_str)
+                 */
+
+                let graph_pos = anchor.get_detailed_graph_position(index);
+
+                let first_node_str: String = match graph_pos.start_orient {
+                    SeqOrient::Forward => {
+                        ">".to_string()
+                            + u64::from(graph_pos.start_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.start_offset_from_node.to_string().as_str()
+                    }
+                    SeqOrient::Reverse => {
+                        "<".to_string()
+                            + u64::from(graph_pos.start_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.start_offset_from_node.to_string().as_str()
+                    }
+                };
+
+                let last_node_str: String = match graph_pos.end_orient {
+                    SeqOrient::Forward => {
+                        ">".to_string()
+                            + u64::from(graph_pos.end_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.end_offset_from_node.to_string().as_str()
+                    }
+                    SeqOrient::Reverse => {
+                        "<".to_string()
+                            + u64::from(graph_pos.end_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.end_offset_from_node.to_string().as_str()
+                    }
+                };
+
+                format!("({},{}),", first_node_str, last_node_str)
+
             })
             .collect();
 
@@ -441,8 +540,11 @@ impl GAFAlignment {
             residue: Some(0),
             alignment_block_length: Some(0),
             mapping_quality: Some(cmp::min(chain.mapping_quality as u64, 254_u64)),
-            notes: Some(format!("{},{}","ta:Z:chain".to_string(),
-                                format!("n_anchors: {}", chain.anchors.len()))),
+            notes: Some(format!(
+                "{},{}",
+                "ta:Z:chain".to_string(),
+                format!("n_anchors: {}", chain.anchors.len())
+            )),
         }
     }
 
@@ -652,11 +754,20 @@ pub(crate) fn generate_alignment(
         residue: Some(0),
         alignment_block_length: Some(result.n_aligned_bases as u64),
         mapping_quality: Some(255), //result.best_score as u64,
-        notes: Some("as:i:-30".to_string() + " " + result.cs_string.as_str() + ",cg:Z:" + result.cigar.as_str()),
+        notes: Some(
+            "as:i:-30".to_string()
+                + " "
+                + result.cs_string.as_str()
+                + ",cg:Z:"
+                + result.cigar.as_str(),
+        ),
     }
 }
 
-pub fn get_subgraph_paths(graph: &HashGraph, po_range: &OrientedGraphRange) -> HashMap<PathId, Vec<u64>> {
+pub fn get_subgraph_paths(
+    graph: &HashGraph,
+    po_range: &OrientedGraphRange,
+) -> HashMap<PathId, Vec<u64>> {
     let mut subgraph_paths: HashMap<PathId, Vec<u64>> = HashMap::new();
 
     let min_in_range = po_range.handles.iter().min().unwrap().unpack_number();
@@ -676,15 +787,15 @@ pub fn get_subgraph_paths(graph: &HashGraph, po_range: &OrientedGraphRange) -> H
 
 #[cfg(test)]
 mod test {
-    use std::hash::Hash;
-    use std::path::PathBuf;
-    use gfa::gfa::{GFA, Orientation};
+    use crate::align::{get_subgraph_paths, GAFAlignment, OrientedGraphRange, RangeOrient};
+    use crate::chain::Chain;
+    use crate::io::QuerySequence;
+    use gfa::gfa::{Orientation, GFA};
     use gfa::parser::GFAParser;
     use handlegraph::handle::Handle;
     use handlegraph::hashgraph::HashGraph;
-    use crate::align::{GAFAlignment, get_subgraph_paths, OrientedGraphRange, RangeOrient};
-    use crate::chain::Chain;
-    use crate::io::QuerySequence;
+    use std::hash::Hash;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_string_placeholder() {
@@ -720,14 +831,22 @@ mod test {
     fn get_graph_paths() {
         // Create HashGraph from GFA
         let parser = GFAParser::new();
-        let gfa: GFA<usize, ()> = parser.parse_file(&PathBuf::from("./test/test.gfa")).unwrap();
+        let gfa: GFA<usize, ()> = parser
+            .parse_file(&PathBuf::from("./test/test.gfa"))
+            .unwrap();
         let graph = HashGraph::from_gfa(&gfa);
 
         let oriented_graph_range = OrientedGraphRange {
             orient: RangeOrient::Forward,
-            handles: vec![Handle::new(graph.min_id, Orientation::Forward), Handle::new(graph.max_id, Orientation::Forward)]
+            handles: vec![
+                Handle::new(graph.min_id, Orientation::Forward),
+                Handle::new(graph.max_id, Orientation::Forward),
+            ],
         };
 
-        println!("Get subgraph path: {:#?}", get_subgraph_paths(&graph, &oriented_graph_range));
+        println!(
+            "Get subgraph path: {:#?}",
+            get_subgraph_paths(&graph, &oriented_graph_range)
+        );
     }
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 //use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 
 use crate::align::{best_alignment_for_query, GAFAlignment};
-use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain};
+use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain, AnchorPosOnGraph};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
@@ -44,26 +44,37 @@ pub fn map_reads(
     info!("Found {} reads!", inputs.len());
 
     let start_chaining = Instant::now();
+
+    /*
+    // Show where each node starts
+    for (i,node_ref) in index.node_ref.iter().enumerate() {
+        println!("Node {} starts at {}", i, node_ref.seq_idx)
+    }
+    println!("\n");
+     */
+
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
         .into_iter()
         .map(|query| {
+
             // First find the anchors, aka exact matches between
             // seqs and kmers in the index
-            let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query);
+            let mut seq_anchors: Vec<Anchor> = anchors_for_query(index, query, true);
 
-            /*
-            println!("noderef: {:#?}", index.node_ref);
+            // Debug for anchors positions
+            println!("Query name: {}", query.name);
             for anchor in &seq_anchors {
-                println!("Anchor: {}, start_id: {}, end_id: {}, start_pos: {:#?}, end_pos: {:#?}",
+                let graph_pos = AnchorPosOnGraph::new(anchor, index);
+                println!("Anchor {}\tnode start: {}(+{}),node end: {}(+{})\tread start: {}, read end: {}",
                          anchor.id,
-                         index.handle_from_seqpos(&anchor.target_begin).id(),
-                         index.handle_from_seqpos(&anchor.target_end).id(),
-                         anchor.target_begin,
-                         anchor.target_end
-                );
+                         graph_pos.start_node, graph_pos.start_offset_from_node,
+                         graph_pos.end_node, graph_pos.end_offset_from_node,
+                         anchor.query_begin, anchor.query_end);
             }
-             */
+            println!("\n");
+
+            //println!("Anchors: {:?}", seq_anchors);
 
             // Chain close anchors together to find longer matches
             let mut seq_chains: Vec<Chain> = chain_anchors(
@@ -96,10 +107,6 @@ pub fn map_reads(
             }
              */
 
-            // Sort the chains according to their number of anchors
-            // TODO: using the score would be better...
-            seq_chains.sort_by(|a, b| a.anchors.len().cmp(&b.anchors.len()));
-
             seq_chains
         })
         .collect();
@@ -112,7 +119,7 @@ pub fn map_reads(
         chains.iter().map(|x| x.len()).sum::<usize>()
     );
 
-    //info!("Chains are: {:#?}", chains);
+    //info!("Chains: {:#?}", chains);
 
     let chains_gaf: Vec<GAFAlignment> = chains
         .iter()
@@ -146,7 +153,6 @@ pub fn map_reads(
 
     // Perform the alignment with rs-abPOA, using the chains as a reference
     if also_align {
-
         let parser = GFAParser::new();
         let gfa: GFA<usize, ()> = parser
             .parse_file(&PathBuf::from(input_graph.unwrap()))
@@ -156,7 +162,7 @@ pub fn map_reads(
         let start_alignment = Instant::now();
         let alignments: Vec<GAFAlignment> = chains
             .iter()
-            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n, &graph))
+            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n, &graph, false))
             .collect();
         info!(
             "Alignment took: {} ms",
@@ -247,6 +253,7 @@ mod test {
         );
     }
 
+    /*
     #[test]
     fn test_map_with_alignment() {
         let parser = GFAParser::new();
@@ -263,4 +270,5 @@ mod test {
             None,
         );
     }
+     */
 }

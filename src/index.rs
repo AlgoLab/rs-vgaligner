@@ -458,19 +458,25 @@ impl Index {
     }
 
     // Get where a certain node starts in the linearization
-    pub fn get_bv_select(&self, element_no: u64) -> usize {
+    pub fn get_bv_select(&self, element_no: u64) -> u64 {
+        if element_no == 0 {
+            panic!("Element_no should be > 0");
+        }
+
         let mut select: usize = 0;
+        let mut start_pos: u64 = 0;
 
         for i in 0..self.seq_bv.len() {
             if self.seq_bv.get(i) == true {
                 select += 1;
             }
             if select as u64 == element_no {
+                start_pos = i;
                 break;
             }
         }
 
-        select
+        start_pos
     }
 
     // -------
@@ -1641,5 +1647,89 @@ mod test {
 
         assert_eq!(ranks, vec![1, 2, 2, 3, 3, 4, 4, 4]);
         assert_eq!(inverse_ranks, vec![1, 1, 1, 2, 2, 3, 3, 4]);
+    }
+
+    #[test]
+    fn test_index_returns_same_positions() {
+        // Build the index
+        let graph = create_simple_graph();
+        let index = Index::build(&graph, 3, 100, 100, None, None, false, None);
+
+        for handle in graph.handles_iter().sorted() {
+            let node_start_bv = index.get_bv_select(u64::from(handle.id()));
+
+            let handle_rank = handle.unpack_number() - 1;
+            let node_start_noderef = index.node_ref.get(handle_rank as usize).unwrap().seq_idx;
+
+            assert_eq!(node_start_bv as u64, node_start_noderef);
+        }
+    }
+
+    #[test]
+    fn test_index_contains_multinode_kmers() {
+        // Build the index
+        let graph = create_simple_graph();
+        let index = Index::build(&graph, 5, 100, 100, None, None, false, None);
+
+        assert!(index.find_positions_for_query_kmer(&"ACTGC").len() > 0);
+        assert!(index.find_positions_for_query_kmer(&"CTGCA").len() > 0);
+
+        let mut graph2: HashGraph = HashGraph::new();
+        let h1 = graph2.create_handle("ACG".as_bytes(), 1);
+        let h2 = graph2.create_handle("C".as_bytes(), 2);
+        let h3 = graph2.create_handle("G".as_bytes(), 3);
+        let h4 = graph2.create_handle("TTTTT".as_bytes(), 4);
+        graph2.create_edge(&Edge(h1, h2));
+        graph2.create_edge(&Edge(h1, h3));
+        graph2.create_edge(&Edge(h2, h4));
+        graph2.create_edge(&Edge(h3, h4));
+
+        let index2 = Index::build(&graph2, 5, 100, 100, None, None, false, None);
+
+        let acggt_pos = index2.find_positions_for_query_kmer(&"ACGGT");
+        assert!(acggt_pos.len() > 0);
+        let first_pos = acggt_pos.get(0).unwrap();
+        assert_eq!(first_pos.start.position, 0);
+        assert_eq!(first_pos.end.position, 6);
+
+        let gcttt_pos = index2.find_positions_for_query_kmer(&"GCTTT");
+        assert!(gcttt_pos.len() > 0);
+        let first_pos = gcttt_pos.get(0).unwrap();
+        assert_eq!(first_pos.start.position, 2);
+        assert_eq!(first_pos.end.position, 8);
+
+        let ctttt_pos = index2.find_positions_for_query_kmer(&"CTTTT");
+        assert!(ctttt_pos.len() > 0);
+        let first_pos = ctttt_pos.get(0).unwrap();
+        assert_eq!(first_pos.start.position, 3);
+        assert_eq!(first_pos.end.position, 9);
+
+
+        let mut graph3: HashGraph = HashGraph::new();
+        let h1 = graph3.create_handle("ACG".as_bytes(), 1);
+        let h2 = graph3.create_handle("C".as_bytes(), 2);
+        let h3 = graph3.create_handle("G".as_bytes(), 3);
+        let h4 = graph3.create_handle("TTTTT".as_bytes(), 4);
+        let h5 = graph3.create_handle("TA".as_bytes(), 5);
+        let h6 = graph3.create_handle("CG".as_bytes(), 6);
+        let h7 = graph3.create_handle("TTT".as_bytes(), 7);
+
+        graph3.create_edge(&Edge(h1, h2));
+        graph3.create_edge(&Edge(h1, h3));
+        graph3.create_edge(&Edge(h2, h4));
+        graph3.create_edge(&Edge(h3, h4));
+        graph3.create_edge(&Edge(h4, h5));
+        graph3.create_edge(&Edge(h4, h6));
+        graph3.create_edge(&Edge(h5, h7));
+        graph3.create_edge(&Edge(h6, h7));
+
+
+        let index3 = Index::build(&graph3, 5, 100, 100, None, None, false, None);
+
+        let ttcgt_pos = index3.find_positions_for_query_kmer(&"TTCGT");
+        assert!(ttcgt_pos.len() > 0);
+        let first_pos = ttcgt_pos.get(0).unwrap();
+        assert_eq!(first_pos.start.position, 8);
+        assert_eq!(first_pos.end.position, 15);
     }
 }
