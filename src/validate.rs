@@ -2,6 +2,7 @@ use crate::align::GAFAlignment;
 use crate::index::Index;
 use crate::io::QuerySequence;
 use bstr::ByteVec;
+use gfa::gfa::Line::Path;
 use handlegraph::handle::Handle;
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::hashgraph::{HashGraph, PathId};
@@ -13,7 +14,6 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path as OSPath;
-use gfa::gfa::Line::Path;
 
 pub struct ValidationRecord {
     pub read_name: String,
@@ -205,11 +205,10 @@ pub fn create_subgraph_GFA(
 }
 
 pub fn export_GFA(GFAcontent: String, file_name: String) -> std::io::Result<()> {
-
     let subgraph_folder = OSPath::new("./subgraphs");
     match subgraph_folder.exists() {
         false => fs::create_dir(subgraph_folder).unwrap(),
-        true => ()
+        true => (),
     };
     let file_path = subgraph_folder.join(file_name.clone());
 

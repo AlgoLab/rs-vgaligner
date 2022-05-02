@@ -36,6 +36,7 @@ bitvector = "0.1.5"
 # abpoa partial order aligner
 #ab_poa = { git = "https://github.com/HopedWall/rs-abpoa", rev = "d2200bf"}
 ab_poa = {git = "https://github.com/HopedWall/rs-abpoa"}
+#ab_poa = { path = "../rs-abPOA"}
 
 # profiling
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug"]}

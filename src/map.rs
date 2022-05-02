@@ -6,7 +6,7 @@ use std::path::PathBuf;
 //use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 
 use crate::align::{best_alignment_for_query, GAFAlignment};
-use crate::chain::{anchors_for_query, chain_anchors, Anchor, Chain, AnchorPosOnGraph};
+use crate::chain::{anchors_for_query, chain_anchors, Anchor, AnchorPosOnGraph, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
 
@@ -45,13 +45,11 @@ pub fn map_reads(
 
     let start_chaining = Instant::now();
 
-    /*
     // Show where each node starts
-    for (i,node_ref) in index.node_ref.iter().enumerate() {
+    for (i, node_ref) in index.node_ref.iter().enumerate() {
         println!("Node {} starts at {}", i, node_ref.seq_idx)
     }
     println!("\n");
-     */
 
     // Collect chains obtained from each input sequence
     let chains: Vec<Vec<Chain>> = inputs
@@ -162,7 +160,9 @@ pub fn map_reads(
         let start_alignment = Instant::now();
         let alignments: Vec<GAFAlignment> = chains
             .iter()
-            .map(|query_chains| best_alignment_for_query(index, query_chains, align_best_n, &graph, false))
+            .map(|query_chains| {
+                best_alignment_for_query(index, query_chains, align_best_n, &graph, false)
+            })
             .collect();
         info!(
             "Alignment took: {} ms",

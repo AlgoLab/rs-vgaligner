@@ -10,14 +10,14 @@ use itertools::Itertools;
 use crate::chain::Chain;
 use crate::index::Index;
 
+use crate::kmer::SeqOrient;
 use crate::validate::{create_subgraph_GFA, export_GFA};
+use ab_poa::abpoa::rand;
 use handlegraph::hashgraph::{HashGraph, PathId};
 use handlegraph::pathgraph::PathHandleGraph;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
-use ab_poa::abpoa::rand;
-use crate::kmer::SeqOrient;
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
@@ -49,19 +49,36 @@ pub(crate) fn obtain_base_level_alignment(
     graph: &HashGraph,
     export_subgraph: bool,
 ) -> GAFAlignment {
-    // Find the range of node ids involved in the alignment
+    info!("Start alignment of {}!", chain.query.name);
 
+    // Find the range of node ids involved in the alignment
     let start_range = Instant::now();
     let po_range = find_range_chain(index, chain);
     info!(
         "Finding the PO range took: {} ms",
         start_range.elapsed().as_millis()
     );
-    println!("Graph range: {:#?}", po_range.handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    println!(
+        "Graph range (before): {:?}",
+        po_range
+            .handles
+            .iter()
+            .map(|x| x.unpack_number())
+            .collect::<Vec<u64>>()
+    );
+    let extended_range = extend_range_chain_2(index, chain, po_range);
+    println!(
+        "Graph range (after): {:?}",
+        extended_range
+            .handles
+            .iter()
+            .map(|x| x.unpack_number())
+            .collect::<Vec<u64>>()
+    );
 
     // Find nodes and edges
     let start_find_graph = Instant::now();
-    let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
+    let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &extended_range);
     info!(
         "Finding nodes and edges took: {} ms",
         start_find_graph.elapsed().as_millis()
@@ -76,17 +93,22 @@ pub(crate) fn obtain_base_level_alignment(
     // The obtained subgraph can be exported as a GAF, if the user
     // chooses to do so (mostly for debug purposes)
     if export_subgraph {
-        let paths = get_subgraph_paths(graph, &po_range);
+        let paths = get_subgraph_paths(graph, &extended_range);
         let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &paths);
         export_GFA(
             subgraph_as_gfa,
             format!("{}-subgraph-{}.gfa", chain.query.name, chain.anchors.len()),
         )
-            .unwrap();
+        .unwrap();
 
-        info!("GFA exported in {}", format!("subgraphs/{}-subgraph-{}.gfa", chain.query.name, chain.score));
+        info!(
+            "GFA exported in {}",
+            format!(
+                "subgraphs/{}-subgraph-{}.gfa",
+                chain.query.name, chain.score
+            )
+        );
     }
-
 
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
@@ -123,12 +145,15 @@ pub(crate) fn obtain_base_level_alignment(
         result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str());
     }
 
+    println!("Abpoa result abpoa-nodes {:?}", result.abpoa_nodes);
+    println!("Abpoa result graph-nodes {:?}", result.graph_nodes);
+
     let start_GAF = Instant::now();
     let alignment: GAFAlignment = generate_alignment(
         index,
         chain,
         &result,
-        &po_range,
+        &extended_range,
         //&subquery_range,
         &(0 as u64..chain.query.seq.len() as u64),
         chain.query.seq.len(),
@@ -301,6 +326,269 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     }
 }
 
+pub fn extend_range_chain(
+    index: &Index,
+    chain: &Chain,
+    old_range: OrientedGraphRange,
+) -> OrientedGraphRange {
+    let mut extended_handles: Vec<Handle> = old_range.handles.clone();
+
+    println!(
+        "Chain start (query): {}, chain ends (query): {}",
+        chain.anchors.front().unwrap().query_begin,
+        chain.anchors.back().unwrap().query_end
+    );
+
+    let mut prefix_diff: u64 = chain.anchors.front().unwrap().query_begin;
+    println!("Prefix diff is: {}", prefix_diff);
+
+    // Only if necessary, extend to the left
+    if prefix_diff > 0 {
+        let first_handle = old_range.get_first_handle();
+
+        let mut left_handles: Vec<(usize, Handle)> = index
+            .incoming_edges_from_handle(first_handle)
+            .into_iter()
+            .map(|handle| (prefix_diff as usize, handle))
+            .collect();
+
+        while !left_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (prefix_left, curr_handle) in left_handles {
+                println!(
+                    "Extending node {} with prefix_left: {}",
+                    curr_handle.unpack_number(),
+                    prefix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < prefix_left {
+                    let remaining_length = prefix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_left_handles: Vec<(usize, Handle)> = index
+                        .incoming_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_left_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            left_handles = next_handles;
+        }
+    }
+
+    let mut suffix_diff: u64 =
+        chain.query.seq.len() as u64 - chain.anchors.back().unwrap().query_end;
+    println!("Suffix diff is: {}", suffix_diff);
+
+    // Then, if necessary, extend to the right
+    if suffix_diff > 0 {
+        let last_handle = old_range.get_last_handle();
+
+        let mut right_handles: Vec<(usize, Handle)> = index
+            .outgoing_edges_from_handle(last_handle)
+            .into_iter()
+            .map(|handle| (suffix_diff as usize, handle))
+            .collect();
+
+        while !right_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (suffix_left, curr_handle) in right_handles {
+                println!(
+                    "Extending node {} with suffix_left: {}",
+                    curr_handle.unpack_number(),
+                    suffix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < suffix_left {
+                    let remaining_length = suffix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_right_handles: Vec<(usize, Handle)> = index
+                        .outgoing_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_right_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            right_handles = next_handles;
+        }
+    }
+
+    extended_handles.sort();
+    extended_handles.dedup();
+
+    OrientedGraphRange {
+        orient: old_range.orient,
+        handles: extended_handles,
+    }
+}
+
+pub fn extend_range_chain_2(
+    index: &Index,
+    chain: &Chain,
+    old_range: OrientedGraphRange,
+) -> OrientedGraphRange {
+    let mut extended_handles: Vec<Handle> = old_range.handles.clone();
+
+    println!(
+        "Chain start (query): {}, chain ends (query): {}",
+        chain.anchors.front().unwrap().query_begin,
+        chain.anchors.back().unwrap().query_end
+    );
+
+    let mut prefix_diff: u64 = chain.anchors.front().unwrap().query_begin;
+    println!("Prefix diff is: {}", prefix_diff);
+
+    let first_handle = old_range.get_first_handle();
+    let first_anchor = chain.anchors.front().unwrap();
+    let start_prefix_on_node =
+        first_anchor.target_begin.position - index.get_bv_select(first_handle.unpack_number());
+    if start_prefix_on_node < prefix_diff {
+        prefix_diff -= start_prefix_on_node;
+    } else {
+        prefix_diff = 0;
+    }
+    println!("New prefix diff is: {}", prefix_diff);
+
+    // Only if necessary, extend to the left
+    if prefix_diff > 0 {
+        let mut left_handles: Vec<(usize, Handle)> = index
+            .incoming_edges_from_handle(first_handle)
+            .into_iter()
+            .map(|handle| (prefix_diff as usize, handle))
+            .collect();
+
+        while !left_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (prefix_left, curr_handle) in left_handles {
+                println!(
+                    "Extending node {} with prefix_left: {}",
+                    curr_handle.unpack_number(),
+                    prefix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < prefix_left {
+                    let remaining_length = prefix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_left_handles: Vec<(usize, Handle)> = index
+                        .incoming_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_left_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            left_handles = next_handles;
+        }
+    }
+
+    let mut suffix_diff: u64 =
+        chain.query.seq.len() as u64 - chain.anchors.back().unwrap().query_end;
+    println!("Suffix diff is: {}", suffix_diff);
+
+    let last_handle = old_range.get_last_handle();
+    let last_anchor = chain.anchors.back().unwrap();
+    let end_suffix_on_node = index.get_bv_select(last_handle.unpack_number() + 1)
+        - 1
+        - last_anchor.get_end_seqpos_inclusive().position;
+    println!(
+        "End suffix on node: {} (next_node_start-1: {}, anchor_end: {})",
+        end_suffix_on_node,
+        index.get_bv_select(first_handle.unpack_number() + 1) - 1,
+        last_anchor.get_end_seqpos_inclusive().position
+    );
+    if end_suffix_on_node > suffix_diff {
+        suffix_diff = 0;
+    } else {
+        suffix_diff -= end_suffix_on_node;
+    }
+    println!("New suffix diff is: {}", suffix_diff);
+
+    // Then, if necessary, extend to the right
+    if suffix_diff > 0 {
+        let mut right_handles: Vec<(usize, Handle)> = index
+            .outgoing_edges_from_handle(last_handle)
+            .into_iter()
+            .map(|handle| (suffix_diff as usize, handle))
+            .collect();
+
+        while !right_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (suffix_left, curr_handle) in right_handles {
+                println!(
+                    "Extending node {} with suffix_left: {}",
+                    curr_handle.unpack_number(),
+                    suffix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < suffix_left {
+                    let remaining_length = suffix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_right_handles: Vec<(usize, Handle)> = index
+                        .outgoing_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_right_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            right_handles = next_handles;
+        }
+    }
+
+    extended_handles.sort();
+    extended_handles.dedup();
+
+    OrientedGraphRange {
+        orient: old_range.orient,
+        handles: extended_handles,
+    }
+}
+
 /// Finds the nodes and edges involved in the alignment. These are returned in a format
 /// compatible with rs-abpoa (https://github.com/HopedWall/rs-abPOA), see the
 /// "Interacting with abPOA" section for further details.
@@ -439,56 +727,56 @@ impl GAFAlignment {
             .iter()
             .map(|anchor| {
                 /*
-                // Find first and last node, and output it in the path matching
-                let first_handle = index.handle_from_seqpos(&anchor.target_begin);
-                let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
+                 // Find first and last node, and output it in the path matching
+                 let first_handle = index.handle_from_seqpos(&anchor.target_begin);
+                 let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
 
-                let first_node_start = index.get_bv_select(u64::from(first_handle.id()));
-                let first_node_offset = anchor.target_begin.position - first_node_start as u64;
+                 let first_node_start = index.get_bv_select(u64::from(first_handle.id()));
+                 let first_node_offset = anchor.target_begin.position - first_node_start as u64;
 
-                let last_node_start = index.get_bv_select(u64::from(last_handle.id()));
-                let last_node_offset = anchor.target_end.position - last_node_start as u64;
+                 let last_node_start = index.get_bv_select(u64::from(last_handle.id()));
+                 let last_node_offset = anchor.target_end.position - last_node_start as u64;
 
-               /*
-                let first_handle_rank = first_handle.unpack_number() - 1;
-                let first_node_start = index
-                    .node_ref
-                    .get(first_handle_rank as usize)
-                    .unwrap()
-                    .seq_idx;
-                let first_node_offset = anchor.target_begin.position - first_node_start;
+                /*
+                 let first_handle_rank = first_handle.unpack_number() - 1;
+                 let first_node_start = index
+                     .node_ref
+                     .get(first_handle_rank as usize)
+                     .unwrap()
+                     .seq_idx;
+                 let first_node_offset = anchor.target_begin.position - first_node_start;
 
-                let last_handle_rank = last_handle.unpack_number() - 1;
-                let last_node_start = index
-                    .node_ref
-                    .get(last_handle_rank as usize)
-                    .unwrap()
-                    .seq_idx;
-                let last_node_offset = anchor.target_end.position - last_node_start;
-                 */
+                 let last_handle_rank = last_handle.unpack_number() - 1;
+                 let last_node_start = index
+                     .node_ref
+                     .get(last_handle_rank as usize)
+                     .unwrap()
+                     .seq_idx;
+                 let last_node_offset = anchor.target_end.position - last_node_start;
+                  */
 
-                // Add the orientation
-                let first_node_str: String = match first_handle.is_reverse() {
-                    false => {
-                        ">".to_string()
-                            + u64::from(first_handle.id()).to_string().as_str()
-                            + ":"
-                            + first_node_offset.to_string().as_str()
-                    }
-                    true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
-                };
-                let last_node_str: String = match last_handle.is_reverse() {
-                    false => {
-                        ">".to_string()
-                            + u64::from(last_handle.id()).to_string().as_str()
-                            + ":"
-                            + last_node_offset.to_string().as_str()
-                    }
-                    true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
-                };
+                 // Add the orientation
+                 let first_node_str: String = match first_handle.is_reverse() {
+                     false => {
+                         ">".to_string()
+                             + u64::from(first_handle.id()).to_string().as_str()
+                             + ":"
+                             + first_node_offset.to_string().as_str()
+                     }
+                     true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                 };
+                 let last_node_str: String = match last_handle.is_reverse() {
+                     false => {
+                         ">".to_string()
+                             + u64::from(last_handle.id()).to_string().as_str()
+                             + ":"
+                             + last_node_offset.to_string().as_str()
+                     }
+                     true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                 };
 
-                format!("({},{}),", first_node_str, last_node_str)
-                 */
+                 format!("({},{}),", first_node_str, last_node_str)
+                  */
 
                 let graph_pos = anchor.get_detailed_graph_position(index);
 
@@ -523,7 +811,6 @@ impl GAFAlignment {
                 };
 
                 format!("({},{}),", first_node_str, last_node_str)
-
             })
             .collect();
 

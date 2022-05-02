@@ -1704,7 +1704,6 @@ mod test {
         assert_eq!(first_pos.start.position, 3);
         assert_eq!(first_pos.end.position, 9);
 
-
         let mut graph3: HashGraph = HashGraph::new();
         let h1 = graph3.create_handle("ACG".as_bytes(), 1);
         let h2 = graph3.create_handle("C".as_bytes(), 2);
@@ -1722,7 +1721,6 @@ mod test {
         graph3.create_edge(&Edge(h4, h6));
         graph3.create_edge(&Edge(h5, h7));
         graph3.create_edge(&Edge(h6, h7));
-
 
         let index3 = Index::build(&graph3, 5, 100, 100, None, None, false, None);
 

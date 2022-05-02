@@ -1,6 +1,6 @@
 use core::cmp;
-use std::cmp::{min, Ordering};
 use std::cmp::Ordering::Equal;
+use std::cmp::{min, Ordering};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use std::ops::Range;
@@ -12,8 +12,8 @@ use serde::de::Unexpected::Seq;
 
 use crate::index::Index;
 use crate::io::QuerySequence;
-use crate::kmer::{SeqOrient, SeqPos};
 use crate::kmer::SeqOrient::Forward;
+use crate::kmer::{SeqOrient, SeqPos};
 
 // Instead of using pointers like in the original implementation,
 // now each Anchor has an id, and the best predecessor is
@@ -69,7 +69,7 @@ impl Anchor {
         end_seqpos
     }
 
-    pub fn get_detailed_graph_position(&self, index: &Index) -> AnchorPosOnGraph  {
+    pub fn get_detailed_graph_position(&self, index: &Index) -> AnchorPosOnGraph {
         AnchorPosOnGraph::new(self, index)
     }
 }
@@ -91,17 +91,29 @@ impl AnchorPosOnGraph {
         let first_handle = index.handle_from_seqpos(&anchor.target_begin);
         let first_node_start = index.get_bv_select(u64::from(first_handle.id()));
         let (first_node_orient, first_node_offset) = match first_handle.is_reverse() {
-            false => (SeqOrient::Forward, anchor.target_begin.position - first_node_start as u64),
+            false => (
+                SeqOrient::Forward,
+                anchor.target_begin.position - first_node_start as u64,
+            ),
             //true => (SeqOrient::Reverse, first_node_start as u64 - anchor.target_begin.position)
-            true => (SeqOrient::Reverse, anchor.target_begin.position - first_node_start as u64)
+            true => (
+                SeqOrient::Reverse,
+                anchor.target_begin.position - first_node_start as u64,
+            ),
         };
 
         let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
         let last_node_start = index.get_bv_select(u64::from(last_handle.id()));
         let (last_node_orient, last_node_offset) = match last_handle.is_reverse() {
-            false => (SeqOrient::Forward, anchor.target_end.position - last_node_start as u64),
+            false => (
+                SeqOrient::Forward,
+                anchor.get_end_seqpos_inclusive().position - last_node_start as u64,
+            ),
             //true => (SeqOrient::Reverse, last_node_start as u64 - anchor.target_end.position)
-            true => (SeqOrient::Reverse, anchor.target_end.position - last_node_start as u64)
+            true => (
+                SeqOrient::Reverse,
+                anchor.get_end_seqpos_inclusive().position - last_node_start as u64,
+            ),
         };
 
         AnchorPosOnGraph {
@@ -110,7 +122,7 @@ impl AnchorPosOnGraph {
             start_offset_from_node: first_node_offset,
             end_orient: last_node_orient,
             end_node: last_handle.unpack_number(),
-            end_offset_from_node: last_node_offset
+            end_offset_from_node: last_node_offset,
         }
     }
 }
@@ -119,7 +131,11 @@ impl AnchorPosOnGraph {
 // Since the kmer positions are already stored in the index, one simply has to
 // split the query into kmers, and then get the target positions from the index itself.
 // NOTE: if a kmer appears in multiple positions, ALL the resulting anchors will be emitted
-pub(crate) fn anchors_for_query(index: &Index, query: &QuerySequence, only_forward: bool) -> Vec<Anchor> {
+pub(crate) fn anchors_for_query(
+    index: &Index,
+    query: &QuerySequence,
+    only_forward: bool,
+) -> Vec<Anchor> {
     let mut anchors: Vec<Anchor> = Vec::new();
 
     // Get kmers from the query, having the same size as the ones
@@ -135,7 +151,9 @@ pub(crate) fn anchors_for_query(index: &Index, query: &QuerySequence, only_forwa
 
         let mut anchors_for_kmer: Vec<Anchor> = Vec::new();
         for pos in ref_pos_vec {
-            if (only_forward && pos.start.orient == Forward && pos.end.orient == Forward) || (!only_forward)  {
+            if (only_forward && pos.start.orient == Forward && pos.end.orient == Forward)
+                || (!only_forward)
+            {
                 anchors_for_kmer.push(Anchor::new(
                     i as u64,
                     (i + kmer_size) as u64,
@@ -264,14 +282,28 @@ pub fn score_anchor(a: &Anchor, b: &Anchor, seed_length: &u64, max_gap: &u64) ->
             && a.target_end.orient == b.target_begin.orient
             && a.target_begin.orient == b.target_end.orient)
     {
-        println!("Min score between i: {:?} (orients: {:?}/{:?}) and j: {:?} (orients: {:?}/{:?})",
-                 b.id, b.target_begin.orient, b.target_end.orient,
-                 a.id, a.target_begin.orient, a.target_end.orient);
+        println!(
+            "Min score between i: {:?} (orients: {:?}/{:?}) and j: {:?} (orients: {:?}/{:?})",
+            b.id,
+            b.target_begin.orient,
+            b.target_end.orient,
+            a.id,
+            a.target_begin.orient,
+            a.target_end.orient
+        );
 
         if a.query_end >= b.query_end {
-            println!("A ends after B in the query ({} vs {})", a.query_end, b.query_end);
-        } else if a.target_end.orient == b.target_end.orient && a.target_end.position >= b.target_end.position {
-            println!("A ends after B in the linearization ({} vs {})", a.target_end.position, b.target_end.position);
+            println!(
+                "A ends after B in the query ({} vs {})",
+                a.query_end, b.query_end
+            );
+        } else if a.target_end.orient == b.target_end.orient
+            && a.target_end.position >= b.target_end.position
+        {
+            println!(
+                "A ends after B in the linearization ({} vs {})",
+                a.target_end.position, b.target_end.position
+            );
         } else {
             println!("A and B have different orients");
         }
@@ -351,21 +383,24 @@ pub fn chain_anchors(
     // First sort the anchors by their ending position
     //anchors.sort_by(|a, b| a.target_end.position.cmp(&b.target_end.position));
 
-    anchors.sort_by(|a,b|
-        match b.target_end.orient.cmp(&a.target_end.orient) {
-            Ordering::Equal => a.target_end.position.cmp(&b.target_end.position),
-            other => other,
-        });
+    anchors.sort_by(|a, b| match b.target_end.orient.cmp(&a.target_end.orient) {
+        Ordering::Equal => a.target_end.position.cmp(&b.target_end.position),
+        other => other,
+    });
 
-    println!("Sorted anchors: {:?}", anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
+    println!(
+        "Sorted anchors: {:?}",
+        anchors.iter().map(|x| x.id).collect::<Vec<u64>>()
+    );
     //println!("Query: {}", query.seq);
     //println!("Query: {}, Anchors: {:#?}", query.seq, anchors);
+
+    let mut curr_max: f64 = 0.0f64;
 
     // Then, compute the maximal chaining score up to the current anchor.
     // This score is called f(i) in the paper.
     // NOTE: Starts at 1 because anchors[0] has no previous values
     for i in 1..anchors.len() {
-
         let min_j = match bandwidth > i as u64 {
             true => 0,
             false => i - bandwidth as usize,
@@ -386,16 +421,29 @@ pub fn chain_anchors(
             // This is where we compute f(j) + a(j,i) - B(j,i)
             let proposed_score = score_anchor(&anchor_j, anchor_i, &seed_length, &max_gap);
 
-            println!("For i {} and j {} proposed score is: {}", anchor_i.id, anchor_j.id, proposed_score);
+            println!(
+                "For i {} and j {} proposed score is: {}",
+                anchor_i.id, anchor_j.id, proposed_score
+            );
 
             // We are now obtaining f(i)
             if proposed_score > anchor_i.max_chain_score {
-                println!("Proposed: {} vs max_chain: {} (predecessor: {:?})", proposed_score, anchor_i.max_chain_score, anchor_i.best_predecessor_id);
+                println!(
+                    "Proposed: {} vs max_chain: {} (predecessor: {:?})",
+                    proposed_score, anchor_i.max_chain_score, anchor_i.best_predecessor_id
+                );
 
                 anchor_i.max_chain_score = proposed_score;
                 anchor_i.best_predecessor_id = Some(anchor_j.id);
 
-                println!("Updated anchor {}'s score to: {} (predecessor: {:?})\n", anchor_i.id, anchor_i.max_chain_score, anchor_i.best_predecessor_id);
+                println!(
+                    "Updated anchor {}'s score to: {} (predecessor: {:?})\n",
+                    anchor_i.id, anchor_i.max_chain_score, anchor_i.best_predecessor_id
+                );
+            }
+
+            if proposed_score > curr_max {
+                curr_max = proposed_score
             }
         }
         println!("\n");
@@ -405,20 +453,21 @@ pub fn chain_anchors(
     let mut chains: Vec<Chain> = Vec::new();
 
     if !anchors.is_empty() {
-
         for anchor in anchors.iter() {
-            println!("For i {} predecessor is {:?}", anchor.id, anchor.best_predecessor_id);
+            println!(
+                "For i {} predecessor is {:?}",
+                anchor.id, anchor.best_predecessor_id
+            );
         }
         println!("\n");
 
         let mut i = anchors.len() - 1;
 
         loop {
-
             let mut curr_anchor = anchors.get_mut(i).unwrap();
 
-            if curr_anchor.best_predecessor_id.is_some() && curr_anchor.max_chain_score > seed_length as f64 {
-
+            if curr_anchor.best_predecessor_id.is_some() && curr_anchor.max_chain_score == curr_max
+            {
                 // Create the chain
                 let mut curr_chain = Chain::new();
                 curr_chain.query = query.clone();
@@ -430,7 +479,14 @@ pub fn chain_anchors(
 
                     // Add the current anchor
                     curr_chain.anchors.push_back(curr_anchor.clone());
-                    println!("Curr chain: {:?}", curr_chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
+                    println!(
+                        "Curr chain: {:?}",
+                        curr_chain
+                            .anchors
+                            .iter()
+                            .map(|x| x.id)
+                            .collect::<Vec<u64>>()
+                    );
 
                     // Get the position of the previous anchor in the ordering
                     // NOTE: the anchor's id and the position in the anchors vec may be different
@@ -441,50 +497,50 @@ pub fn chain_anchors(
                 }
                 curr_chain.anchors.push_back(curr_anchor.clone());
 
-            /*
-            let mut a = anchors.get_mut(i).unwrap();
-            if a.best_predecessor_id.is_some() && a.max_chain_score > seed_length as f64 {
-                // Mark predecessor as None (-> a won't be used again)
-                let mut pred_id = a.best_predecessor_id;
-                a.best_predecessor_id = None;
+                /*
+                let mut a = anchors.get_mut(i).unwrap();
+                if a.best_predecessor_id.is_some() && a.max_chain_score > seed_length as f64 {
+                    // Mark predecessor as None (-> a won't be used again)
+                    let mut pred_id = a.best_predecessor_id;
+                    a.best_predecessor_id = None;
 
-                // Create chain + add the query it refers to
-                let mut curr_chain = Chain::new();
-                curr_chain.query = query.clone();
+                    // Create chain + add the query it refers to
+                    let mut curr_chain = Chain::new();
+                    curr_chain.query = query.clone();
 
-                curr_chain.anchors.push_back(a.clone());
-                curr_chain.score = a.max_chain_score;
+                    curr_chain.anchors.push_back(a.clone());
+                    curr_chain.score = a.max_chain_score;
 
-                // Go back the best predecessors until a None is found
-                loop {
-                    match pred_id {
-                        Some(b) => {
-                            // Get the anchor relative to the best predecessor
-                            let mut pred_anchor = anchors.get_mut(b as usize).unwrap();
-                            curr_chain.anchors.push_back(pred_anchor.clone());
-                            pred_id = pred_anchor.best_predecessor_id;
-                            pred_anchor.best_predecessor_id = None;
-                            println!("Curr chain: {:?}", curr_chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
-
-                            /*
-                            // Check if it has already been used (= its best predecessor is None)
-                            if pred_anchor.best_predecessor_id.is_none() {
+                    // Go back the best predecessors until a None is found
+                    loop {
+                        match pred_id {
+                            Some(b) => {
+                                // Get the anchor relative to the best predecessor
+                                let mut pred_anchor = anchors.get_mut(b as usize).unwrap();
                                 curr_chain.anchors.push_back(pred_anchor.clone());
-                                pred_id = None;
-                            } else {
                                 pred_id = pred_anchor.best_predecessor_id;
                                 pred_anchor.best_predecessor_id = None;
-                                curr_chain.anchors.push_back(pred_anchor.clone());
                                 println!("Curr chain: {:?}", curr_chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
-                                //println!("Pred id: {:?}", pred_id);
-                            }
-                             */
-                        }
-                        None => break,
-                    }
-                }
 
-             */
+                                /*
+                                // Check if it has already been used (= its best predecessor is None)
+                                if pred_anchor.best_predecessor_id.is_none() {
+                                    curr_chain.anchors.push_back(pred_anchor.clone());
+                                    pred_id = None;
+                                } else {
+                                    pred_id = pred_anchor.best_predecessor_id;
+                                    pred_anchor.best_predecessor_id = None;
+                                    curr_chain.anchors.push_back(pred_anchor.clone());
+                                    println!("Curr chain: {:?}", curr_chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
+                                    //println!("Pred id: {:?}", pred_id);
+                                }
+                                 */
+                            }
+                            None => break,
+                        }
+                    }
+
+                 */
 
                 if curr_chain.anchors.len() >= chain_min_n_anchors as usize {
                     curr_chain.anchors = VecDeque::from_iter(curr_chain.anchors.into_iter().rev());
@@ -515,7 +571,11 @@ pub fn chain_anchors(
     //println!("Anchors per chain: {:#?}", chains.iter().map(|c| c.anchors.len()).collect::<Vec<usize>>());
     //println!("Chains are: {:#?}", chains);
     for (i, chain) in chains.iter().enumerate() {
-        println!("Chain {} has anchors: {:?}", i, chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>());
+        println!(
+            "Chain {} has anchors: {:?}",
+            i,
+            chain.anchors.iter().map(|x| x.id).collect::<Vec<u64>>()
+        );
     }
 
     /*
@@ -639,13 +699,13 @@ mod test {
     use crate::align::find_nodes_edges_for_abpoa;
     use crate::align::generate_alignment;
     use crate::align::{find_range_chain, GAFAlignment};
-    use crate::chain::{anchors_for_query, chain_anchors, Chain, Anchor, score_anchor};
+    use crate::chain::{anchors_for_query, chain_anchors, score_anchor, Anchor, Chain};
     use crate::index::Index;
     use crate::io::QuerySequence;
+    use crate::kmer::SeqOrient::Forward;
     use crate::kmer::{SeqOrient, SeqPos};
     use ab_poa::abpoa::abpoa_align_sequence_to_subgraph;
     use handlegraph::handle::Handle;
-    use crate::kmer::SeqOrient::Forward;
     //use rayon::prelude::*;
 
     /// This function creates a simple graph, used for debugging
@@ -709,7 +769,7 @@ mod test {
         let index = Index::build(&graph2, kmer_length, 100, 100, None, None, false, None);
 
         let query = String::from("AAAAACTTTTTT");
-        assert_eq!(query.len() as u64, kmer_length+1);
+        assert_eq!(query.len() as u64, kmer_length + 1);
         let input_seq = QuerySequence::from_string(&query);
         let anchors = anchors_for_query(&index, &input_seq, true);
         assert_eq!(anchors.len(), 2);
@@ -728,10 +788,19 @@ mod test {
         let input_seq = QuerySequence::from_string(&query);
         let mut anchors = anchors_for_query(&index, &input_seq, true);
         println!("Anchors are: {:#?}", anchors);
-        let chains = chain_anchors(&mut anchors, kmer_length, 100, 100, 0,0.5, 10.0, 100.0, &input_seq);
+        let chains = chain_anchors(
+            &mut anchors,
+            kmer_length,
+            100,
+            100,
+            0,
+            0.5,
+            10.0,
+            100.0,
+            &input_seq,
+        );
         //println!("Chains are: {:#?}", chains);
     }
-
 
     #[test]
     fn test_simple_anchors() {
@@ -962,6 +1031,6 @@ mod test {
             best_predecessor_id: None,
         };
 
-        assert_eq!(-f64::MAX, score_anchor(&a,&b, &11, &100))
+        assert_eq!(-f64::MAX, score_anchor(&a, &b, &11, &100))
     }
 }

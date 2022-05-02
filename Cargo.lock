@@ -5,13 +5,13 @@ version = 3
 [[package]]
 name = "ab_poa"
 version = "1.5.0"
-source = "git+https://github.com/HopedWall/rs-abpoa#a6f60b09e991c79ca67e54f7988d2bd2ae64b23a"
+source = "git+https://github.com/HopedWall/rs-abpoa#33ea6cd724107b2d02506cfc069f2d1d50a783e9"
 dependencies = [
  "bindgen",
  "cmake",
  "env_logger 0.9.0",
+ "gfa",
  "log",
- "rayon",
 ]
 
 [[package]]
