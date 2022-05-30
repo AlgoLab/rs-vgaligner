@@ -161,7 +161,7 @@ pub fn map_reads(
         let alignments: Vec<GAFAlignment> = chains
             .iter()
             .map(|query_chains| {
-                best_alignment_for_query(index, query_chains, align_best_n, &graph, false)
+                best_alignment_for_query(index, query_chains, align_best_n, &graph, true)
             })
             .collect();
         info!(

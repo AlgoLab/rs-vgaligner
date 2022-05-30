@@ -2,8 +2,8 @@ use core::cmp;
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
-use handlegraph::handle::Handle;
+use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentMode, AbpoaAlignmentResult};
+use handlegraph::handle::{Direction, Edge, Handle};
 use itertools::Itertools;
 //use rayon::prelude::*;
 
@@ -18,6 +18,11 @@ use handlegraph::pathgraph::PathHandleGraph;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
+use handlegraph::handlegraph::HandleGraph;
+use handlegraph::mutablehandlegraph::MutableHandleGraph;
+use rspoa::api::{align_global_no_gap, align_local_no_gap};
+use rspoa::gaf_output::GAFStruct;
+use seal::pair::NeedlemanWunsch;
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
@@ -85,10 +90,6 @@ pub(crate) fn obtain_base_level_alignment(
     );
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.iter().map(|x| &x as &str).collect();
-    info!(
-        "For read {} found nodes: {:?} and edges: {:?}",
-        chain.query.name, nodes_str, edges
-    );
 
     // The obtained subgraph can be exported as a GAF, if the user
     // chooses to do so (mostly for debug purposes)
@@ -130,6 +131,47 @@ pub(crate) fn obtain_base_level_alignment(
      */
     //println!("Subquery is: {:#?}", subquery);
 
+    // Align with rspoa
+    let subgraph = generate_subgraph_hashgraph(nodes_str, edges);
+    for h in subgraph.handles_iter().sorted() {
+        println!("Node is: {}", h.unpack_number());
+        println!("Neighbors are: {:?}", subgraph.handle_edges_iter(h, Direction::Right).map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    }
+
+    /*
+    let res_gaf = align_global_no_gap(
+        &chain.query.seq.to_string(),
+        &subgraph,
+        None, None, Some(1.0f32));
+     */
+    let res_gaf = align_local_no_gap(
+        &chain.query.seq.to_string(),
+        &subgraph,
+        None,
+        None);
+    //println!("Res GAF: {}", res_gaf.to_string());
+
+    let alignment = GAFAlignment::from_rspoa_alignment(res_gaf, chain, extended_range);
+
+    /*
+    let alignment = GAFAlignment {
+        query_name: Some(chain.query.name.clone()),
+        query_length: None,
+        query_start: None,
+        query_end: None,
+        strand: None,
+        path_matching: None,
+        path_length: None,
+        path_start: None,
+        path_end: None,
+        residue: None,
+        alignment_block_length: None,
+        mapping_quality: None,
+        notes: None
+    };
+     */
+
+    /*
     // Align with abpoa
     let result: AbpoaAlignmentResult;
     unsafe {
@@ -142,8 +184,27 @@ pub(crate) fn obtain_base_level_alignment(
             start_alignment.elapsed().as_millis()
         );
          */
-        result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str());
+
+        let alignment_mode = match nodes_str.len() {
+            1 => AbpoaAlignmentMode::Global,
+            _ => AbpoaAlignmentMode::Local
+        };
+
+        let mode_as_str = match alignment_mode {
+            AbpoaAlignmentMode::Global => "Global",
+            AbpoaAlignmentMode::Local => "Local"
+        };
+
+        info!(
+        "For read {} calling abPOA with: \n nodes: vec!{:?} \n edges: vec!{:?} \n query: \"{}\" \n mode: {}",
+        chain.query.name, nodes_str, edges, chain.query.seq.as_str(), mode_as_str
+        );
+
+        result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str(), alignment_mode);
     }
+
+    //Test seal
+    //let strategy = NeedlemanWunsch::new(1, -1, -1, -1);
 
     println!("Abpoa result abpoa-nodes {:?}", result.abpoa_nodes);
     println!("Abpoa result graph-nodes {:?}", result.graph_nodes);
@@ -162,8 +223,23 @@ pub(crate) fn obtain_base_level_alignment(
         "Generating the GAF took: {} ms",
         start_GAF.elapsed().as_millis()
     );
+     */
 
     alignment
+}
+
+pub fn generate_subgraph_hashgraph(nodes_str: Vec<&str>, edges: Vec<(usize, usize)>) -> HashGraph {
+    let mut subgraph = HashGraph::new();
+
+    let handles: Vec<Handle> = nodes_str.iter().map(|seq| subgraph.append_handle(seq.as_bytes())).collect();
+
+    for edge in edges {
+        let left_handle = handles.get(edge.0).unwrap();
+        let right_handle = handles.get(edge.1).unwrap();
+        subgraph.create_edge(&Edge(*left_handle, *right_handle))
+    }
+
+    subgraph
 }
 
 /// Represents the orientation of a range of nodes (= a subgraph but without edges) in a graph.
@@ -854,6 +930,45 @@ impl GAFAlignment {
         }
     }
 
+    pub(crate) fn from_rspoa_alignment(rspoa_alignment: GAFStruct, chain: &Chain, graph_range: OrientedGraphRange) -> Self {
+
+        println!("Range handles are: {:?}", graph_range.handles);
+        println!("Path matching nodes are: {:?}", rspoa_alignment.path);
+
+        let og_graph_handles: Vec<Handle> =
+            rspoa_alignment
+                .path
+                .iter()
+                .map(|rspoa_node| {
+                    graph_range.handles.get(*rspoa_node-1).unwrap().clone()
+                })
+                .collect();
+
+        let alignment_path_string: Vec<String> = og_graph_handles
+            .iter()
+            .map(|handle| match handle.is_reverse() {
+                false => ">".to_string() + u64::from(handle.id()).to_string().as_str(),
+                true => "<".to_string() + u64::from(handle.id()).to_string().as_str(),
+            })
+            .collect();
+
+        GAFAlignment {
+            query_name: Some(chain.query.name.clone()),
+            query_length: Some(chain.query.seq.len() as u64),
+            query_start: Some(rspoa_alignment.query_start as u64),
+            query_end: Some(rspoa_alignment.query_end as u64),
+            strand: Some(rspoa_alignment.strand),
+            path_matching: Some(alignment_path_string.join("")),
+            path_length: Some(rspoa_alignment.path_length as u64),
+            path_start: Some(rspoa_alignment.path_start as u64),
+            path_end: Some(rspoa_alignment.path_end as u64),
+            residue: Some(rspoa_alignment.residue_matches_number as u64),
+            alignment_block_length: Some(0),
+            mapping_quality: Some(255),
+            notes: Some(rspoa_alignment.comments),
+        }
+    }
+
     pub fn to_string(&self) -> String {
         format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
@@ -1036,8 +1151,10 @@ pub(crate) fn generate_alignment(
         strand: Some('+'),
         path_matching: Some(alignment_path_string.iter().join("")),
         path_length: Some(result.abpoa_nodes.len() as u64),
-        path_start: Some(0),                                 //og_path_start,
-        path_end: Some(result.abpoa_nodes.len() as u64 - 1), //og_path_end,
+        //path_start: Some(0),                                 //og_path_start,
+        //path_end: Some(result.abpoa_nodes.len() as u64 - 1), //og_path_end,
+        path_start: Some(result.aln_start_offset as u64),
+        path_end: Some(result.aln_end_offset as u64),
         residue: Some(0),
         alignment_block_length: Some(result.n_aligned_bases as u64),
         mapping_quality: Some(255), //result.best_score as u64,
