@@ -6,6 +6,8 @@ use crate::map::map_reads;
 
 use log::{info, warn};
 use std::env;
+use std::option::Option::None;
+use crate::align::AlignerForPOA;
 
 pub fn map_main(global_matches: &ArgMatches) {
     let matches = global_matches.subcommand_matches("map").unwrap();
@@ -59,6 +61,12 @@ pub fn map_main(global_matches: &ArgMatches) {
 
     let validation_path = matches.value_of("validation-path");
 
+    let poa_aligner = match matches.value_of("poa-aligner") {
+        Some("rspoa") => AlignerForPOA::Rspoa,
+        Some("abpoa") => AlignerForPOA::Abpoa,
+        _ => panic!("POA Aligner not recognized")
+    };
+
     let n_threads = matches
         .value_of("n-threads")
         .unwrap_or(&"0") // Use all available threads
@@ -105,5 +113,6 @@ pub fn map_main(global_matches: &ArgMatches) {
         also_validate,
         input_graph,
         validation_path,
+        poa_aligner,
     );
 }

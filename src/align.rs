@@ -20,9 +20,15 @@ use std::env;
 use std::time::Instant;
 use handlegraph::handlegraph::HandleGraph;
 use handlegraph::mutablehandlegraph::MutableHandleGraph;
-use rspoa::api::{align_global_no_gap, align_local_no_gap};
+use rspoa::api::{align_local_no_gap};
 use rspoa::gaf_output::GAFStruct;
 use seal::pair::NeedlemanWunsch;
+
+#[derive(Clone, Copy)]
+pub enum AlignerForPOA {
+    Abpoa,
+    Rspoa
+}
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
@@ -31,13 +37,14 @@ pub fn best_alignment_for_query(
     align_best_n: u64,
     graph: &HashGraph,
     export_subgraphs: bool,
+    aligner: AlignerForPOA,
 ) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| match chain.is_placeholder {
-            false => obtain_base_level_alignment(index, chain, graph, export_subgraphs),
+            false => obtain_base_level_alignment(index, chain, graph, export_subgraphs, aligner.clone()),
             true => GAFAlignment::from_placeholder_chain(chain),
         })
         .collect();
@@ -53,6 +60,7 @@ pub(crate) fn obtain_base_level_alignment(
     chain: &Chain,
     graph: &HashGraph,
     export_subgraph: bool,
+    aligner: AlignerForPOA,
 ) -> GAFAlignment {
     info!("Start alignment of {}!", chain.query.name);
 
@@ -131,99 +139,90 @@ pub(crate) fn obtain_base_level_alignment(
      */
     //println!("Subquery is: {:#?}", subquery);
 
-    // Align with rspoa
-    let subgraph = generate_subgraph_hashgraph(nodes_str, edges);
-    for h in subgraph.handles_iter().sorted() {
-        println!("Node is: {}", h.unpack_number());
-        println!("Neighbors are: {:?}", subgraph.handle_edges_iter(h, Direction::Right).map(|x| x.unpack_number()).collect::<Vec<u64>>());
-    }
+    let alignment = align_with_POA_aligner(aligner, chain, extended_range, nodes_str, edges, index);
 
-    /*
-    let res_gaf = align_global_no_gap(
-        &chain.query.seq.to_string(),
-        &subgraph,
-        None, None, Some(1.0f32));
-     */
-    let res_gaf = align_local_no_gap(
-        &chain.query.seq.to_string(),
-        &subgraph,
-        None,
-        None);
-    //println!("Res GAF: {}", res_gaf.to_string());
+    alignment
+}
 
-    let alignment = GAFAlignment::from_rspoa_alignment(res_gaf, chain, extended_range);
+fn align_with_POA_aligner(aligner: AlignerForPOA, chain: &Chain, extended_range: OrientedGraphRange, nodes_str: Vec<&str>, edges: Vec<(usize, usize)>, index: &Index) -> GAFAlignment {
+    let alignment = match aligner {
 
-    /*
-    let alignment = GAFAlignment {
-        query_name: Some(chain.query.name.clone()),
-        query_length: None,
-        query_start: None,
-        query_end: None,
-        strand: None,
-        path_matching: None,
-        path_length: None,
-        path_start: None,
-        path_end: None,
-        residue: None,
-        alignment_block_length: None,
-        mapping_quality: None,
-        notes: None
+        AlignerForPOA::Rspoa => {   // Align with rspoa
+            let subgraph = generate_subgraph_hashgraph(nodes_str, edges);
+
+            /*
+            for h in subgraph.handles_iter().sorted() {
+                println!("Node is: {}", h.unpack_number());
+                println!("Neighbors are: {:?}", subgraph.handle_edges_iter(h, Direction::Right).map(|x| x.unpack_number()).collect::<Vec<u64>>());
+            }
+             */
+
+            let res_gaf = align_local_no_gap(
+                &chain.query.seq.to_string(),
+                &subgraph,
+                None,
+                None);
+            //println!("Res GAF: {}", res_gaf.to_string());
+
+            GAFAlignment::from_rspoa_alignment(res_gaf, chain, extended_range)
+        },
+
+        AlignerForPOA::Abpoa => {  // Align with abpoa
+
+            let result: AbpoaAlignmentResult;
+            unsafe {
+                //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
+                //let start_alignment = Instant::now();
+                //result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
+                /*
+                info!(
+                    "Performing the alignment took: {} ms",
+                    start_alignment.elapsed().as_millis()
+                );
+                 */
+
+                /*
+                let alignment_mode = match nodes_str.len() {
+                    1 => AbpoaAlignmentMode::Global,
+                    _ => AbpoaAlignmentMode::Local
+                };
+                 */
+                let alignment_mode = AbpoaAlignmentMode::Global;
+
+                let mode_as_str = match alignment_mode {
+                    AbpoaAlignmentMode::Global => "Global",
+                    AbpoaAlignmentMode::Local => "Local"
+                };
+
+                info!(
+                    "For read {} calling abPOA with: \n nodes: vec!{:?} \n edges: vec!{:?} \n query: \"{}\" \n mode: {}",
+                    chain.query.name, nodes_str, edges, chain.query.seq.as_str(), mode_as_str
+                );
+
+                result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str(), alignment_mode);
+            }
+
+            println!("Abpoa result abpoa-nodes {:?}", result.abpoa_nodes);
+            println!("Abpoa result graph-nodes {:?}", result.graph_nodes);
+
+            let start_GAF = Instant::now();
+            let alignment: GAFAlignment = generate_alignment(
+                index,
+                chain,
+                &result,
+                &extended_range,
+                //&subquery_range,
+                &(0 as u64..chain.query.seq.len() as u64),
+                chain.query.seq.len(),
+            );
+            info!(
+                "Generating the GAF took: {} ms",
+                start_GAF.elapsed().as_millis()
+            );
+
+            alignment
+        }
     };
-     */
-
-    /*
-    // Align with abpoa
-    let result: AbpoaAlignmentResult;
-    unsafe {
-        //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
-        //let start_alignment = Instant::now();
-        //result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
-        /*
-        info!(
-            "Performing the alignment took: {} ms",
-            start_alignment.elapsed().as_millis()
-        );
-         */
-
-        let alignment_mode = match nodes_str.len() {
-            1 => AbpoaAlignmentMode::Global,
-            _ => AbpoaAlignmentMode::Local
-        };
-
-        let mode_as_str = match alignment_mode {
-            AbpoaAlignmentMode::Global => "Global",
-            AbpoaAlignmentMode::Local => "Local"
-        };
-
-        info!(
-        "For read {} calling abPOA with: \n nodes: vec!{:?} \n edges: vec!{:?} \n query: \"{}\" \n mode: {}",
-        chain.query.name, nodes_str, edges, chain.query.seq.as_str(), mode_as_str
-        );
-
-        result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str(), alignment_mode);
-    }
-
-    //Test seal
-    //let strategy = NeedlemanWunsch::new(1, -1, -1, -1);
-
-    println!("Abpoa result abpoa-nodes {:?}", result.abpoa_nodes);
-    println!("Abpoa result graph-nodes {:?}", result.graph_nodes);
-
-    let start_GAF = Instant::now();
-    let alignment: GAFAlignment = generate_alignment(
-        index,
-        chain,
-        &result,
-        &extended_range,
-        //&subquery_range,
-        &(0 as u64..chain.query.seq.len() as u64),
-        chain.query.seq.len(),
-    );
-    info!(
-        "Generating the GAF took: {} ms",
-        start_GAF.elapsed().as_millis()
-    );
-     */
 
     alignment
 }

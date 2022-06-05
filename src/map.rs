@@ -5,7 +5,7 @@ use std::path::PathBuf;
 //use rayon::iter::ParallelIterator;
 //use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 
-use crate::align::{best_alignment_for_query, GAFAlignment};
+use crate::align::{AlignerForPOA, best_alignment_for_query, GAFAlignment};
 use crate::chain::{anchors_for_query, chain_anchors, Anchor, AnchorPosOnGraph, Chain};
 use crate::index::Index;
 use crate::io::QuerySequence;
@@ -40,6 +40,7 @@ pub fn map_reads(
     also_validate: bool,
     input_graph: Option<&str>,
     validation_path: Option<&str>,
+    poa_aligner: AlignerForPOA,
 ) {
     info!("Found {} reads!", inputs.len());
 
@@ -161,7 +162,7 @@ pub fn map_reads(
         let alignments: Vec<GAFAlignment> = chains
             .iter()
             .map(|query_chains| {
-                best_alignment_for_query(index, query_chains, align_best_n, &graph, true)
+                best_alignment_for_query(index, query_chains, align_best_n, &graph, true, poa_aligner)
             })
             .collect();
         info!(
@@ -226,11 +227,14 @@ fn write_gaf_to_file(gaf_alignments: &Vec<GAFAlignment>, file_name: String) -> s
 
 #[cfg(test)]
 mod test {
+    use std::option::Option::None;
     use std::path::PathBuf;
 
     use gfa::gfa::GFA;
     use gfa::parser::GFAParser;
     use handlegraph::hashgraph::HashGraph;
+    use crate::align::AlignerForPOA;
+    use crate::align::AlignerForPOA::Abpoa;
 
     use crate::index::Index;
     use crate::io::read_seqs_from_file;
@@ -250,6 +254,7 @@ mod test {
         map_reads(
             &index, &query, 50, 1000, 3, 0.5f64, 0.1, 60.0f64, false, None, false, 100, false,
             None, None,
+            AlignerForPOA::Abpoa,
         );
     }
 
