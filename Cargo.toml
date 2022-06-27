@@ -15,11 +15,12 @@ bv = "0.11.1"
 #rayon = "1.5.0"
 regex = "1"
 
-# Minimal Perfect Hash Funnction, it's bbhash with another name
+# Minimal Perfect Hash Function, it's bbhash with another name
 boomphf = {version = "0.5.9", features = ["serde"]}
 
 substring = "1.4.5"
 ahash = "0.7.2"
+#ahash = {git="https://github.com/tkaitchuck/aHash"}
 itertools = "0.10.1"
 
 # Used in the index (IITree = Implicit Interval Tree)
@@ -34,8 +35,10 @@ serde_with = "1.8.1"
 bitvector = "0.1.5"
 
 # abpoa partial order aligner
-#ab_poa = { git = "https://github.com/HopedWall/rs-abpoa", rev = "d2200bf"}
-ab_poa = {git = "https://github.com/HopedWall/rs-abpoa"}
+#ab_poa = {git = "https://github.com/HopedWall/rs-abpoa"}
+ab_poa = {path = "../rs-abPOA"}
+seal = {git = "https://github.com/regexident/rust-seal"}
+rspoa = {git = "https://github.com/AlgoLab/rspoa"}
 
 # profiling
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_debug"]}

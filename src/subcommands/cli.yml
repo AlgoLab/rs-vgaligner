@@ -166,6 +166,13 @@ subcommands:
                   help: Set the path where to store the results (validation)
                   required: false
                   takes_value: true
+            - poa-aligner:
+                short: p
+                long: poa-aligner
+                value_name: ALIGNER_NAME
+                help: Set the POA aligner to use (either rspoa or abpoa)
+                required: true
+                takes_value: true
 
 
 

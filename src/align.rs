@@ -2,70 +2,122 @@ use core::cmp;
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentResult};
-use handlegraph::handle::Handle;
+use ab_poa::abpoa_wrapper::{AbpoaAligner, AbpoaAlignmentMode, AbpoaAlignmentResult};
+use handlegraph::handle::{Direction, Edge, Handle};
 use itertools::Itertools;
 //use rayon::prelude::*;
 
 use crate::chain::Chain;
 use crate::index::Index;
 
+use crate::kmer::SeqOrient;
+use crate::validate::{create_subgraph_GFA, export_GFA};
+use ab_poa::abpoa::rand;
+use handlegraph::hashgraph::{HashGraph, PathId};
+use handlegraph::pathgraph::PathHandleGraph;
 use log::{info, warn};
 use std::env;
 use std::time::Instant;
-use crate::validate::{create_subgraph_GFA, export_GFA};
+use handlegraph::handlegraph::HandleGraph;
+use handlegraph::mutablehandlegraph::MutableHandleGraph;
+use rspoa::api::{align_local_no_gap};
+use rspoa::gaf_output::GAFStruct;
+use seal::pair::NeedlemanWunsch;
+
+#[derive(Clone, Copy)]
+pub enum AlignerForPOA {
+    Abpoa,
+    Rspoa
+}
 
 /// Get all the alignments from the [query_chains], but only return the best one.
 pub fn best_alignment_for_query(
     index: &Index,
     query_chains: &Vec<Chain>,
     align_best_n: u64,
+    graph: &HashGraph,
+    export_subgraphs: bool,
+    aligner: AlignerForPOA,
 ) -> GAFAlignment {
     //println!("Query: {}, Chains: {:#?}", query_chains.get(0).unwrap().query.seq, query_chains);
     let mut alignments: Vec<GAFAlignment> = query_chains
         .iter()
         .take(cmp::min(align_best_n as usize, query_chains.len()))
         .map(|chain| match chain.is_placeholder {
-            false => obtain_base_level_alignment(index, chain),
+            false => obtain_base_level_alignment(index, chain, graph, export_subgraphs, aligner.clone()),
             true => GAFAlignment::from_placeholder_chain(chain),
         })
         .collect();
+
     alignments.sort_by(|a, b| b.path_length.cmp(&a.path_length));
     //println!("Alignments: {:#?}", alignments);
     alignments.first().cloned().unwrap()
 }
 
 /// Get the POA alignment starting from a [chain].
-pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAlignment {
-    // Find the range of node ids involved in the alignment
+pub(crate) fn obtain_base_level_alignment(
+    index: &Index,
+    chain: &Chain,
+    graph: &HashGraph,
+    export_subgraph: bool,
+    aligner: AlignerForPOA,
+) -> GAFAlignment {
+    info!("Start alignment of {}!", chain.query.name);
 
+    // Find the range of node ids involved in the alignment
     let start_range = Instant::now();
     let po_range = find_range_chain(index, chain);
     info!(
         "Finding the PO range took: {} ms",
         start_range.elapsed().as_millis()
     );
-    //println!("Graph range: {:#?}", po_range);
+    println!(
+        "Graph range (before): {:?}",
+        po_range
+            .handles
+            .iter()
+            .map(|x| x.unpack_number())
+            .collect::<Vec<u64>>()
+    );
+    let extended_range = extend_range_chain_2(index, chain, po_range);
+    println!(
+        "Graph range (after): {:?}",
+        extended_range
+            .handles
+            .iter()
+            .map(|x| x.unpack_number())
+            .collect::<Vec<u64>>()
+    );
 
     // Find nodes and edges
     let start_find_graph = Instant::now();
-    let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &po_range);
+    let (nodes, edges) = find_nodes_edges_for_abpoa(&index, &extended_range);
     info!(
         "Finding nodes and edges took: {} ms",
         start_find_graph.elapsed().as_millis()
     );
     // TODO: possibly avoid this
     let nodes_str: Vec<&str> = nodes.iter().map(|x| &x as &str).collect();
-    info!(
-        "For read {} found nodes: {:?} and edges: {:?}",
-        chain.query.name,
-        nodes_str,
-        edges
-    );
 
-    let paths: HashMap<String, Vec<usize>> = HashMap::new();
-    let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &HashMap::new());
-    export_GFA(subgraph_as_gfa, format!("{}-subgraph.gfa", chain.query.name)).unwrap();
+    // The obtained subgraph can be exported as a GAF, if the user
+    // chooses to do so (mostly for debug purposes)
+    if export_subgraph {
+        let paths = get_subgraph_paths(graph, &extended_range);
+        let subgraph_as_gfa = create_subgraph_GFA(&nodes_str, &edges, &paths);
+        export_GFA(
+            subgraph_as_gfa,
+            format!("{}-subgraph-{}.gfa", chain.query.name, chain.anchors.len()),
+        )
+        .unwrap();
+
+        info!(
+            "GFA exported in {}",
+            format!(
+                "subgraphs/{}-subgraph-{}.gfa",
+                chain.query.name, chain.score
+            )
+        );
+    }
 
     //println!("Seqs: {:#?}\n, edges: {:#?}\n, Query: {:#?}", nodes_str, edges, chain.query.seq.to_string());
 
@@ -87,37 +139,106 @@ pub(crate) fn obtain_base_level_alignment(index: &Index, chain: &Chain) -> GAFAl
      */
     //println!("Subquery is: {:#?}", subquery);
 
-    // Align with abpoa
-    let result: AbpoaAlignmentResult;
-    unsafe {
-        //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
-        //let start_alignment = Instant::now();
-        //result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
-        /*
-        info!(
-            "Performing the alignment took: {} ms",
-            start_alignment.elapsed().as_millis()
-        );
-         */
-        result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str());
-    }
-
-    let start_GAF = Instant::now();
-    let alignment: GAFAlignment = generate_alignment(
-        index,
-        chain,
-        &result,
-        &po_range,
-        //&subquery_range,
-        &(0 as u64..chain.query.seq.len() as u64),
-        chain.query.seq.len(),
-    );
-    info!(
-        "Generating the GAF took: {} ms",
-        start_GAF.elapsed().as_millis()
-    );
+    let alignment = align_with_POA_aligner(aligner, chain, extended_range, nodes_str, edges, index);
 
     alignment
+}
+
+fn align_with_POA_aligner(aligner: AlignerForPOA, chain: &Chain, extended_range: OrientedGraphRange, nodes_str: Vec<&str>, edges: Vec<(usize, usize)>, index: &Index) -> GAFAlignment {
+    let alignment = match aligner {
+
+        AlignerForPOA::Rspoa => {   // Align with rspoa
+            let subgraph = generate_subgraph_hashgraph(nodes_str, edges);
+
+            /*
+            for h in subgraph.handles_iter().sorted() {
+                println!("Node is: {}", h.unpack_number());
+                println!("Neighbors are: {:?}", subgraph.handle_edges_iter(h, Direction::Right).map(|x| x.unpack_number()).collect::<Vec<u64>>());
+            }
+             */
+
+            let res_gaf = align_local_no_gap(
+                &chain.query.seq.to_string(),
+                &subgraph,
+                None,
+                None);
+            //println!("Res GAF: {}", res_gaf.to_string());
+
+            GAFAlignment::from_rspoa_alignment(res_gaf, chain, extended_range)
+        },
+
+        AlignerForPOA::Abpoa => {  // Align with abpoa
+
+            let result: AbpoaAlignmentResult;
+            unsafe {
+                //result = align_with_poa(&nodes_str, &edges, subquery.as_str());
+                //let start_alignment = Instant::now();
+                //result = align_with_poa(&nodes_str, &edges, chain.query.seq.as_str());
+                /*
+                info!(
+                    "Performing the alignment took: {} ms",
+                    start_alignment.elapsed().as_millis()
+                );
+                 */
+
+                /*
+                let alignment_mode = match nodes_str.len() {
+                    1 => AbpoaAlignmentMode::Global,
+                    _ => AbpoaAlignmentMode::Local
+                };
+                 */
+                let alignment_mode = AbpoaAlignmentMode::Global;
+
+                let mode_as_str = match alignment_mode {
+                    AbpoaAlignmentMode::Global => "Global",
+                    AbpoaAlignmentMode::Local => "Local"
+                };
+
+                info!(
+                    "For read {} calling abPOA with: \n nodes: vec!{:?} \n edges: vec!{:?} \n query: \"{}\" \n mode: {}",
+                    chain.query.name, nodes_str, edges, chain.query.seq.as_str(), mode_as_str
+                );
+
+                result = AbpoaAligner::create_align_safe(&nodes_str, &edges, chain.query.seq.as_str(), alignment_mode);
+            }
+
+            println!("Abpoa result abpoa-nodes {:?}", result.abpoa_nodes);
+            println!("Abpoa result graph-nodes {:?}", result.graph_nodes);
+
+            let start_GAF = Instant::now();
+            let alignment: GAFAlignment = generate_alignment(
+                index,
+                chain,
+                &result,
+                &extended_range,
+                //&subquery_range,
+                &(0 as u64..chain.query.seq.len() as u64),
+                chain.query.seq.len(),
+            );
+            info!(
+                "Generating the GAF took: {} ms",
+                start_GAF.elapsed().as_millis()
+            );
+
+            alignment
+        }
+    };
+
+    alignment
+}
+
+pub fn generate_subgraph_hashgraph(nodes_str: Vec<&str>, edges: Vec<(usize, usize)>) -> HashGraph {
+    let mut subgraph = HashGraph::new();
+
+    let handles: Vec<Handle> = nodes_str.iter().map(|seq| subgraph.append_handle(seq.as_bytes())).collect();
+
+    for edge in edges {
+        let left_handle = handles.get(edge.0).unwrap();
+        let right_handle = handles.get(edge.1).unwrap();
+        subgraph.create_edge(&Edge(*left_handle, *right_handle))
+    }
+
+    subgraph
 }
 
 /// Represents the orientation of a range of nodes (= a subgraph but without edges) in a graph.
@@ -175,12 +296,20 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
         // last included position
         .map(|a| index.handle_from_seqpos(&a.get_end_seqpos_inclusive()))
         .collect();
+
+    //println!("Start ids: {:?}", start_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    //println!("End ids: {:?}", end_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+
     let all_handles: Vec<Handle> = start_handles
         .into_iter()
         .chain(end_handles.into_iter())
         .collect();
     let min_handle: Handle = *all_handles.iter().min().unwrap();
     let max_handle: Handle = *all_handles.iter().max().unwrap();
+
+    //println!("ids: {:?}", all_handles.iter().map(|x| x.unpack_number()).collect::<Vec<u64>>());
+    //println!("Min id: {}", min_handle.unpack_number());
+    //println!("Max id: {}", max_handle.unpack_number());
 
     /*
     println!(
@@ -269,6 +398,269 @@ pub fn find_range_chain(index: &Index, chain: &Chain) -> OrientedGraphRange {
     OrientedGraphRange {
         orient,
         handles: po_range_handles,
+    }
+}
+
+pub fn extend_range_chain(
+    index: &Index,
+    chain: &Chain,
+    old_range: OrientedGraphRange,
+) -> OrientedGraphRange {
+    let mut extended_handles: Vec<Handle> = old_range.handles.clone();
+
+    println!(
+        "Chain start (query): {}, chain ends (query): {}",
+        chain.anchors.front().unwrap().query_begin,
+        chain.anchors.back().unwrap().query_end
+    );
+
+    let mut prefix_diff: u64 = chain.anchors.front().unwrap().query_begin;
+    println!("Prefix diff is: {}", prefix_diff);
+
+    // Only if necessary, extend to the left
+    if prefix_diff > 0 {
+        let first_handle = old_range.get_first_handle();
+
+        let mut left_handles: Vec<(usize, Handle)> = index
+            .incoming_edges_from_handle(first_handle)
+            .into_iter()
+            .map(|handle| (prefix_diff as usize, handle))
+            .collect();
+
+        while !left_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (prefix_left, curr_handle) in left_handles {
+                println!(
+                    "Extending node {} with prefix_left: {}",
+                    curr_handle.unpack_number(),
+                    prefix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < prefix_left {
+                    let remaining_length = prefix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_left_handles: Vec<(usize, Handle)> = index
+                        .incoming_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_left_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            left_handles = next_handles;
+        }
+    }
+
+    let mut suffix_diff: u64 =
+        chain.query.seq.len() as u64 - chain.anchors.back().unwrap().query_end;
+    println!("Suffix diff is: {}", suffix_diff);
+
+    // Then, if necessary, extend to the right
+    if suffix_diff > 0 {
+        let last_handle = old_range.get_last_handle();
+
+        let mut right_handles: Vec<(usize, Handle)> = index
+            .outgoing_edges_from_handle(last_handle)
+            .into_iter()
+            .map(|handle| (suffix_diff as usize, handle))
+            .collect();
+
+        while !right_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (suffix_left, curr_handle) in right_handles {
+                println!(
+                    "Extending node {} with suffix_left: {}",
+                    curr_handle.unpack_number(),
+                    suffix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < suffix_left {
+                    let remaining_length = suffix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_right_handles: Vec<(usize, Handle)> = index
+                        .outgoing_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_right_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            right_handles = next_handles;
+        }
+    }
+
+    extended_handles.sort();
+    extended_handles.dedup();
+
+    OrientedGraphRange {
+        orient: old_range.orient,
+        handles: extended_handles,
+    }
+}
+
+pub fn extend_range_chain_2(
+    index: &Index,
+    chain: &Chain,
+    old_range: OrientedGraphRange,
+) -> OrientedGraphRange {
+    let mut extended_handles: Vec<Handle> = old_range.handles.clone();
+
+    println!(
+        "Chain start (query): {}, chain ends (query): {}",
+        chain.anchors.front().unwrap().query_begin,
+        chain.anchors.back().unwrap().query_end
+    );
+
+    let mut prefix_diff: u64 = chain.anchors.front().unwrap().query_begin;
+    println!("Prefix diff is: {}", prefix_diff);
+
+    let first_handle = old_range.get_first_handle();
+    let first_anchor = chain.anchors.front().unwrap();
+    let start_prefix_on_node =
+        first_anchor.target_begin.position - index.get_bv_select(first_handle.unpack_number());
+    if start_prefix_on_node < prefix_diff {
+        prefix_diff -= start_prefix_on_node;
+    } else {
+        prefix_diff = 0;
+    }
+    println!("New prefix diff is: {}", prefix_diff);
+
+    // Only if necessary, extend to the left
+    if prefix_diff > 0 {
+        let mut left_handles: Vec<(usize, Handle)> = index
+            .incoming_edges_from_handle(first_handle)
+            .into_iter()
+            .map(|handle| (prefix_diff as usize, handle))
+            .collect();
+
+        while !left_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (prefix_left, curr_handle) in left_handles {
+                println!(
+                    "Extending node {} with prefix_left: {}",
+                    curr_handle.unpack_number(),
+                    prefix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < prefix_left {
+                    let remaining_length = prefix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_left_handles: Vec<(usize, Handle)> = index
+                        .incoming_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_left_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            left_handles = next_handles;
+        }
+    }
+
+    let mut suffix_diff: u64 =
+        chain.query.seq.len() as u64 - chain.anchors.back().unwrap().query_end;
+    println!("Suffix diff is: {}", suffix_diff);
+
+    let last_handle = old_range.get_last_handle();
+    let last_anchor = chain.anchors.back().unwrap();
+    let end_suffix_on_node = index.get_bv_select(last_handle.unpack_number() + 1)
+        - 1
+        - last_anchor.get_end_seqpos_inclusive().position;
+    println!(
+        "End suffix on node: {} (next_node_start-1: {}, anchor_end: {})",
+        end_suffix_on_node,
+        index.get_bv_select(first_handle.unpack_number() + 1) - 1,
+        last_anchor.get_end_seqpos_inclusive().position
+    );
+    if end_suffix_on_node > suffix_diff {
+        suffix_diff = 0;
+    } else {
+        suffix_diff -= end_suffix_on_node;
+    }
+    println!("New suffix diff is: {}", suffix_diff);
+
+    // Then, if necessary, extend to the right
+    if suffix_diff > 0 {
+        let mut right_handles: Vec<(usize, Handle)> = index
+            .outgoing_edges_from_handle(last_handle)
+            .into_iter()
+            .map(|handle| (suffix_diff as usize, handle))
+            .collect();
+
+        while !right_handles.is_empty() {
+            let mut next_handles: Vec<(usize, Handle)> = vec![];
+
+            for (suffix_left, curr_handle) in right_handles {
+                println!(
+                    "Extending node {} with suffix_left: {}",
+                    curr_handle.unpack_number(),
+                    suffix_left
+                );
+                // First, push the handle (since the prefix_diff is > 0)
+                extended_handles.push(curr_handle);
+
+                // Then, determine if this handle has to be extended further
+                let curr_handle_seq = index.seq_from_handle(&curr_handle);
+                if curr_handle_seq.len() < suffix_left {
+                    let remaining_length = suffix_left - curr_handle_seq.len();
+
+                    // Find the left neighbours of the curr_handle
+                    let new_right_handles: Vec<(usize, Handle)> = index
+                        .outgoing_edges_from_handle(&curr_handle)
+                        .into_iter()
+                        .map(|handle| (remaining_length as usize, handle))
+                        .collect();
+
+                    next_handles.extend(new_right_handles.into_iter());
+                }
+
+                // Otherwise, the curr_handle does not get re-added, and is therefore ignored
+                // in the next iterations
+            }
+
+            right_handles = next_handles;
+        }
+    }
+
+    extended_handles.sort();
+    extended_handles.dedup();
+
+    OrientedGraphRange {
+        orient: old_range.orient,
+        handles: extended_handles,
     }
 }
 
@@ -402,23 +794,95 @@ impl GAFAlignment {
             .collect();
             */
 
-        info!("Anchors: {:#?}", chain.anchors);
+        let first_chain_node: Option<u64> = None;
+        let last_chain_node: Option<u64> = None;
+        //info!("Anchors: {:#?}", chain.anchors);
         let mut chain_path_matching: Vec<String> = chain
             .anchors
             .iter()
-            .map(|anchor|{
-                // Find first and last node, and output it in the path matching
-                let first_handle = index.handle_from_seqpos(&anchor.target_begin);
-                let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
+            .map(|anchor| {
+                /*
+                 // Find first and last node, and output it in the path matching
+                 let first_handle = index.handle_from_seqpos(&anchor.target_begin);
+                 let last_handle = index.handle_from_seqpos(&anchor.get_end_seqpos_inclusive());
 
-                // Add the orientation
-                let first_node_str: String = match first_handle.is_reverse() {
-                    false => ">".to_string() + u64::from(first_handle.id()).to_string().as_str(),
-                    true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                 let first_node_start = index.get_bv_select(u64::from(first_handle.id()));
+                 let first_node_offset = anchor.target_begin.position - first_node_start as u64;
+
+                 let last_node_start = index.get_bv_select(u64::from(last_handle.id()));
+                 let last_node_offset = anchor.target_end.position - last_node_start as u64;
+
+                /*
+                 let first_handle_rank = first_handle.unpack_number() - 1;
+                 let first_node_start = index
+                     .node_ref
+                     .get(first_handle_rank as usize)
+                     .unwrap()
+                     .seq_idx;
+                 let first_node_offset = anchor.target_begin.position - first_node_start;
+
+                 let last_handle_rank = last_handle.unpack_number() - 1;
+                 let last_node_start = index
+                     .node_ref
+                     .get(last_handle_rank as usize)
+                     .unwrap()
+                     .seq_idx;
+                 let last_node_offset = anchor.target_end.position - last_node_start;
+                  */
+
+                 // Add the orientation
+                 let first_node_str: String = match first_handle.is_reverse() {
+                     false => {
+                         ">".to_string()
+                             + u64::from(first_handle.id()).to_string().as_str()
+                             + ":"
+                             + first_node_offset.to_string().as_str()
+                     }
+                     true => "<".to_string() + u64::from(first_handle.id()).to_string().as_str(),
+                 };
+                 let last_node_str: String = match last_handle.is_reverse() {
+                     false => {
+                         ">".to_string()
+                             + u64::from(last_handle.id()).to_string().as_str()
+                             + ":"
+                             + last_node_offset.to_string().as_str()
+                     }
+                     true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+                 };
+
+                 format!("({},{}),", first_node_str, last_node_str)
+                  */
+
+                let graph_pos = anchor.get_detailed_graph_position(index);
+
+                let first_node_str: String = match graph_pos.start_orient {
+                    SeqOrient::Forward => {
+                        ">".to_string()
+                            + u64::from(graph_pos.start_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.start_offset_from_node.to_string().as_str()
+                    }
+                    SeqOrient::Reverse => {
+                        "<".to_string()
+                            + u64::from(graph_pos.start_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.start_offset_from_node.to_string().as_str()
+                    }
                 };
-                let last_node_str: String = match last_handle.is_reverse() {
-                    false => ">".to_string() + u64::from(last_handle.id()).to_string().as_str(),
-                    true => "<".to_string() + u64::from(last_handle.id()).to_string().as_str(),
+
+                let last_node_str: String = match graph_pos.end_orient {
+                    SeqOrient::Forward => {
+                        ">".to_string()
+                            + u64::from(graph_pos.end_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.end_offset_from_node.to_string().as_str()
+                    }
+                    SeqOrient::Reverse => {
+                        "<".to_string()
+                            + u64::from(graph_pos.end_node).to_string().as_str()
+                            + ":"
+                            + graph_pos.end_offset_from_node.to_string().as_str()
+                    }
                 };
 
                 format!("({},{}),", first_node_str, last_node_str)
@@ -438,8 +902,11 @@ impl GAFAlignment {
             residue: Some(0),
             alignment_block_length: Some(0),
             mapping_quality: Some(cmp::min(chain.mapping_quality as u64, 254_u64)),
-            notes: Some(format!("{},{}","ta:Z:chain".to_string(),
-                                format!("n_anchors: {}", chain.anchors.len()))),
+            notes: Some(format!(
+                "{},{}",
+                "ta:Z:chain".to_string(),
+                format!("n_anchors: {}", chain.anchors.len())
+            )),
         }
     }
 
@@ -459,6 +926,45 @@ impl GAFAlignment {
             alignment_block_length: None,
             mapping_quality: Some(0),
             notes: None,
+        }
+    }
+
+    pub(crate) fn from_rspoa_alignment(rspoa_alignment: GAFStruct, chain: &Chain, graph_range: OrientedGraphRange) -> Self {
+
+        println!("Range handles are: {:?}", graph_range.handles);
+        println!("Path matching nodes are: {:?}", rspoa_alignment.path);
+
+        let og_graph_handles: Vec<Handle> =
+            rspoa_alignment
+                .path
+                .iter()
+                .map(|rspoa_node| {
+                    graph_range.handles.get(*rspoa_node-1).unwrap().clone()
+                })
+                .collect();
+
+        let alignment_path_string: Vec<String> = og_graph_handles
+            .iter()
+            .map(|handle| match handle.is_reverse() {
+                false => ">".to_string() + u64::from(handle.id()).to_string().as_str(),
+                true => "<".to_string() + u64::from(handle.id()).to_string().as_str(),
+            })
+            .collect();
+
+        GAFAlignment {
+            query_name: Some(chain.query.name.clone()),
+            query_length: Some(chain.query.seq.len() as u64),
+            query_start: Some(rspoa_alignment.query_start as u64),
+            query_end: Some(rspoa_alignment.query_end as u64),
+            strand: Some(rspoa_alignment.strand),
+            path_matching: Some(alignment_path_string.join("")),
+            path_length: Some(rspoa_alignment.path_length as u64),
+            path_start: Some(rspoa_alignment.path_start as u64),
+            path_end: Some(rspoa_alignment.path_end as u64),
+            residue: Some(rspoa_alignment.residue_matches_number as u64),
+            alignment_block_length: Some(0),
+            mapping_quality: Some(255),
+            notes: Some(rspoa_alignment.comments),
         }
     }
 
@@ -644,20 +1150,55 @@ pub(crate) fn generate_alignment(
         strand: Some('+'),
         path_matching: Some(alignment_path_string.iter().join("")),
         path_length: Some(result.abpoa_nodes.len() as u64),
-        path_start: Some(0),                                 //og_path_start,
-        path_end: Some(result.abpoa_nodes.len() as u64 - 1), //og_path_end,
+        //path_start: Some(0),                                 //og_path_start,
+        //path_end: Some(result.abpoa_nodes.len() as u64 - 1), //og_path_end,
+        path_start: Some(result.aln_start_offset as u64),
+        path_end: Some(result.aln_end_offset as u64),
         residue: Some(0),
         alignment_block_length: Some(result.n_aligned_bases as u64),
         mapping_quality: Some(255), //result.best_score as u64,
-        notes: Some("as:i:-30".to_string() + " " + result.cs_string.as_str() + ",cg:Z:" + result.cigar.as_str()),
+        notes: Some(
+            "as:i:-30".to_string()
+                + " "
+                + result.cs_string.as_str()
+                + ",cg:Z:"
+                + result.cigar.as_str(),
+        ),
     }
+}
+
+pub fn get_subgraph_paths(
+    graph: &HashGraph,
+    po_range: &OrientedGraphRange,
+) -> HashMap<PathId, Vec<u64>> {
+    let mut subgraph_paths: HashMap<PathId, Vec<u64>> = HashMap::new();
+
+    let min_in_range = po_range.handles.iter().min().unwrap().unpack_number();
+
+    for path_id in graph.paths_iter() {
+        let mut nodes_in_path: Vec<u64> = vec![];
+        let curr_path = graph.get_path(path_id).unwrap();
+        for handle in &curr_path.nodes {
+            if po_range.handles.contains(&handle) {
+                nodes_in_path.push(handle.unpack_number() - min_in_range + 1);
+            }
+        }
+        subgraph_paths.insert(*path_id, nodes_in_path);
+    }
+    subgraph_paths
 }
 
 #[cfg(test)]
 mod test {
-    use crate::align::GAFAlignment;
+    use crate::align::{get_subgraph_paths, GAFAlignment, OrientedGraphRange, RangeOrient};
     use crate::chain::Chain;
     use crate::io::QuerySequence;
+    use gfa::gfa::{Orientation, GFA};
+    use gfa::parser::GFAParser;
+    use handlegraph::handle::Handle;
+    use handlegraph::hashgraph::HashGraph;
+    use std::hash::Hash;
+    use std::path::PathBuf;
 
     #[test]
     fn test_to_string_placeholder() {
@@ -687,5 +1228,28 @@ mod test {
             "*"
         );
         assert_eq!(alignment.to_string(), expected_string);
+    }
+
+    #[test]
+    fn get_graph_paths() {
+        // Create HashGraph from GFA
+        let parser = GFAParser::new();
+        let gfa: GFA<usize, ()> = parser
+            .parse_file(&PathBuf::from("./test/test.gfa"))
+            .unwrap();
+        let graph = HashGraph::from_gfa(&gfa);
+
+        let oriented_graph_range = OrientedGraphRange {
+            orient: RangeOrient::Forward,
+            handles: vec![
+                Handle::new(graph.min_id, Orientation::Forward),
+                Handle::new(graph.max_id, Orientation::Forward),
+            ],
+        };
+
+        println!(
+            "Get subgraph path: {:#?}",
+            get_subgraph_paths(&graph, &oriented_graph_range)
+        );
     }
 }
